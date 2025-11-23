@@ -5,7 +5,6 @@ Built with **React**, **Tailwind CSS**, **Express**, **Firebase**, and **MongoDB
 
 ---
 
-
 ## 🔗 Live Links
 
 🌐 **Client:** [Smart Deals Client](https://smart-deals-client.vercel.app/)  
