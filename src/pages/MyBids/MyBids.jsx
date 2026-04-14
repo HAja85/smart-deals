@@ -15,7 +15,7 @@ const MyBids = () => {
           setLoading(true);
           const token = await user.getIdToken();
           const res = await fetch(
-            `https://smart-deals-server-five.vercel.app/bids?email=${user.email}`,
+            `/api/bids?email=${user.email}`,
             {
               headers: {
                 authorization: `Bearer ${token}`,
@@ -43,7 +43,7 @@ const MyBids = () => {
     return <Loading />;
   }
 
-  const handleRemoveBit = (_id) => {
+  const handleRemoveBit = (id) => {
     Swal.fire({
       title: "Are you sure?",
       text: "You won't be able to revert this!",
@@ -54,7 +54,7 @@ const MyBids = () => {
       confirmButtonText: "Yes, delete it!",
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`https://smart-deals-server-five.vercel.app/bids/${_id}`, {
+        fetch(`/api/bids/${id}`, {
           method: "DELETE",
         })
           .then((res) => res.json())
@@ -65,7 +65,7 @@ const MyBids = () => {
                 text: "Your Bid has been deleted.",
                 icon: "success",
               });
-              const remainingBids = bids.filter((bid) => bid._id !== _id);
+              const remainingBids = bids.filter((bid) => bid._id !== id);
               setBids(remainingBids);
             }
           });
@@ -76,7 +76,7 @@ const MyBids = () => {
   return (
     <div className="w-full pb-16">
       <h2 className="text-3xl text-center font-bold text-gray-900 py-12">
-        Bids For This Product:{" "}
+        My Bids:{" "}
         <span className="text-[#34699A] font-bold">{bids.length}</span>
       </h2>
 
@@ -128,12 +128,12 @@ const MyBids = () => {
                       <div className="flex items-center gap-3">
                         <img
                           src={bid.buyer_photo || "/placeholder.png"}
-                          alt={bid.buyer_name || "Seller"}
+                          alt={bid.buyer_name || "Buyer"}
                           className="w-10 h-10 rounded-full object-cover border"
                         />
                         <div>
                           <p className="font-semibold text-gray-900 text-sm">
-                            {bid.buyer_name || "Unknown Seller"}
+                            {bid.buyer_name || "Unknown"}
                           </p>
                           <p className="text-gray-500 text-xs">
                             {bid.buyer_email || "No email"}
@@ -179,7 +179,7 @@ const MyBids = () => {
                     colSpan="6"
                     className="py-6 text-center text-gray-500 italic block md:table-cell"
                   >
-                    No bids found for this product.
+                    No bids found.
                   </td>
                 </tr>
               )}

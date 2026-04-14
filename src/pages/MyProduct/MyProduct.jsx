@@ -15,7 +15,7 @@ const MyProduct = () => {
           setLoading(true);
           const token = await user.getIdToken();
           const res = await fetch(
-            `https://smart-deals-server-five.vercel.app/products?email=${user.email}`,
+            `/api/products?email=${user.email}`,
             {
               headers: {
                 authorization: `Bearer ${token}`,
@@ -43,7 +43,7 @@ const MyProduct = () => {
     return <Loading />;
   }
 
-  const handleRemoveProduct = (_id) => {
+  const handleRemoveProduct = (id) => {
     Swal.fire({
       title: "Are you sure?",
       text: "You won't be able to revert this!",
@@ -54,7 +54,7 @@ const MyProduct = () => {
       confirmButtonText: "Yes, delete it!",
     }).then((result) => {
       if (result.isConfirmed) {
-        fetch(`https://smart-deals-server-five.vercel.app/products/${_id}`, {
+        fetch(`/api/products/${id}`, {
           method: "DELETE",
         })
           .then((res) => res.json())
@@ -66,7 +66,7 @@ const MyProduct = () => {
                 icon: "success",
               });
               const remainingProducts = product.filter(
-                (item) => item._id !== _id
+                (item) => item._id !== id
               );
               setProduct(remainingProducts);
             }

@@ -1,20 +1,19 @@
-import React from "react";
+import React, { useContext } from "react";
 import { Link } from "react-router";
 import { FaArrowLeft } from "react-icons/fa";
-import axios from "axios";
-import useAuth from "../../hooks/useAuth";
+import { AuthContext } from "../../context/AuthContext";
 import Swal from "sweetalert2";
 
 const CreatedProduct = () => {
-  const { user } = useAuth();
+  const { user } = useContext(AuthContext);
 
-  const handleCreateProduct = (e) => {
+  const handleCreateProduct = async (e) => {
     e.preventDefault();
     const formData = {
       title: e.target.title.value,
       category: e.target.category.value,
-      price_min: e.target.minPrice.value,
-      price_max: e.target.maxPrice.value,
+      price_min: parseFloat(e.target.minPrice.value) || 0,
+      price_max: parseFloat(e.target.maxPrice.value) || parseFloat(e.target.minPrice.value) || 0,
       condition: e.target.condition.value,
       usage: e.target.usageTime.value,
       image: e.target.productImageUrl.value,
@@ -25,25 +24,40 @@ const CreatedProduct = () => {
       location: e.target.location.value,
       description: e.target.description.value,
       email: e.target.email.value,
-      created_at: e.target.createdAt.value,
       status: "pending",
     };
-    axios.post("https://smart-deals-server-five.vercel.app/products", formData).then((data) => {
-      console.log(data.data);
-      if (data.data.insertedId) {
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (data.insertedId) {
         Swal.fire({
           title: "Product Added",
           icon: "success",
           draggable: true,
         });
+        e.target.reset();
       }
-    });
-    e.target.reset();
+    } catch (err) {
+      Swal.fire({
+        title: "Error",
+        text: "Failed to create product. Please try again.",
+        icon: "error",
+      });
+    }
   };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        {/* Back Button */}
         <Link to="/allproduct">
           <button className="flex items-center gap-2 text-gray-700 hover:text-[#34699A] transition mb-6 cursor-pointer">
             <FaArrowLeft className="w-5 h-5" />
@@ -51,18 +65,15 @@ const CreatedProduct = () => {
           </button>
         </Link>
 
-        {/* Title */}
         <h1 className="text-4xl font-bold text-center text-[#34699A] mb-8">
           Create A Product
         </h1>
 
-        {/* Form Card */}
         <form
           onSubmit={handleCreateProduct}
           className="bg-white rounded-2xl shadow-xl p-8 space-y-6"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Title */}
             <div>
               <label
                 htmlFor="title"
@@ -80,7 +91,6 @@ const CreatedProduct = () => {
               />
             </div>
 
-            {/* Category */}
             <div>
               <label
                 htmlFor="category"
@@ -112,7 +122,6 @@ const CreatedProduct = () => {
               </select>
             </div>
 
-            {/* Min Price */}
             <div>
               <label
                 htmlFor="minPrice"
@@ -121,7 +130,7 @@ const CreatedProduct = () => {
                 Min Price You want to Sale ($)
               </label>
               <input
-                type="text"
+                type="number"
                 id="minPrice"
                 name="minPrice"
                 placeholder="e.g. 18.5"
@@ -130,7 +139,6 @@ const CreatedProduct = () => {
               />
             </div>
 
-            {/* Max Price */}
             <div>
               <label
                 htmlFor="maxPrice"
@@ -139,7 +147,7 @@ const CreatedProduct = () => {
                 Max Price You want to Sale ($)
               </label>
               <input
-                type="text"
+                type="number"
                 id="maxPrice"
                 name="maxPrice"
                 placeholder="Optional (default = Min Price)"
@@ -148,7 +156,6 @@ const CreatedProduct = () => {
             </div>
           </div>
 
-          {/* Product Condition */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
               Product Condition
@@ -176,7 +183,6 @@ const CreatedProduct = () => {
             </div>
           </div>
 
-          {/* Product Usage Time */}
           <div>
             <label
               htmlFor="usageTime"
@@ -193,7 +199,6 @@ const CreatedProduct = () => {
             />
           </div>
 
-          {/* Product Image URL */}
           <div>
             <label
               htmlFor="productImageUrl"
@@ -212,7 +217,6 @@ const CreatedProduct = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Seller Name */}
             <div>
               <label
                 htmlFor="sellerName"
@@ -224,13 +228,12 @@ const CreatedProduct = () => {
                 type="text"
                 id="sellerName"
                 name="name"
-                value={user?.displayName}
+                defaultValue={user?.displayName || ""}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
                 required
               />
             </div>
 
-            {/* Seller Email */}
             <div>
               <label
                 htmlFor="sellerEmail"
@@ -242,13 +245,12 @@ const CreatedProduct = () => {
                 type="email"
                 id="sellerEmail"
                 name="email"
-                value={user?.email}
+                defaultValue={user?.email || ""}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
                 required
               />
             </div>
 
-            {/* Seller Contact */}
             <div>
               <label
                 htmlFor="sellerContact"
@@ -259,14 +261,13 @@ const CreatedProduct = () => {
               <input
                 type="tel"
                 id="sellerContact"
-                name="contact"
+                name="sellerContact"
                 placeholder="Your Contact Number"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
                 required
               />
             </div>
 
-            {/* Seller Image URL */}
             <div>
               <label
                 htmlFor="sellerImageUrl"
@@ -278,13 +279,12 @@ const CreatedProduct = () => {
                 type="url"
                 id="sellerImageUrl"
                 name="sellerImageUrl"
-                value={user?.photoURL}
+                defaultValue={user?.photoURL || ""}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
               />
             </div>
           </div>
 
-          {/* Location */}
           <div>
             <label
               htmlFor="location"
@@ -302,7 +302,6 @@ const CreatedProduct = () => {
             />
           </div>
 
-          {/* Description */}
           <div>
             <label
               htmlFor="description"
@@ -320,15 +319,6 @@ const CreatedProduct = () => {
             ></textarea>
           </div>
 
-          {/* creation time  */}
-          <input
-            type="hidden"
-            name="createdAt"
-            id="createdAt"
-            value={new Date().toISOString()}
-          />
-
-          {/* Submit Button */}
           <div className="pt-4">
             <button
               type="submit"

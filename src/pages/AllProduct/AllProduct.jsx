@@ -6,12 +6,12 @@ import { AuthContext } from "../../context/AuthContext";
 const AllProduct = () => {
   const { loading: authLoading } = useContext(AuthContext);
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch("https://smart-deals-server-five.vercel.app/products");
+        const res = await fetch("/api/products");
         const data = await res.json();
         setProducts(data);
       } catch (error) {

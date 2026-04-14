@@ -1,19 +1,8 @@
 import React, { useEffect, useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  sendPasswordResetEmail,
-  updateProfile,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth } from "../firebase/firebase.config";
-import Swal from "sweetalert2";
 import { AuthContext } from "./AuthContext";
+import Swal from "sweetalert2";
 
-const googleProvider = new GoogleAuthProvider();
+const TOKEN_KEY = "smart_deals_token";
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -22,22 +11,56 @@ const AuthProvider = ({ children }) => {
 
   const setLoadingSystem = (state = true, delay = 2000) => {
     setLoading(state);
-
     if (state) {
-      setTimeout(() => {
-        setLoading(false);
-      }, delay);
+      setTimeout(() => setLoading(false), delay);
     }
   };
 
-  const createUser = (email, password) => {
+  const buildUser = (userData, token) => ({
+    ...userData,
+    accessToken: token,
+    getIdToken: () => Promise.resolve(token),
+  });
+
+  const storeSession = (userData, token) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    const u = buildUser(userData, token);
+    setUser(u);
+    return u;
+  };
+
+  const createUser = (email, password, name, photoURL) => {
     setLoading(true);
-    return createUserWithEmailAndPassword(auth, email, password);
+    return fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password, name, image: photoURL }),
+    })
+      .then((res) => {
+        if (!res.ok) return res.json().then((e) => Promise.reject(new Error(e.detail)));
+        return res.json();
+      })
+      .then(({ user: userData, token }) => {
+        return storeSession(userData, token);
+      })
+      .finally(() => setLoading(false));
   };
 
   const loginUser = (email, password) => {
     setLoading(true);
-    return signInWithEmailAndPassword(auth, email, password);
+    return fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+      .then((res) => {
+        if (!res.ok) return res.json().then((e) => Promise.reject(new Error(e.detail)));
+        return res.json();
+      })
+      .then(({ user: userData, token }) => {
+        return storeSession(userData, token);
+      })
+      .finally(() => setLoading(false));
   };
 
   const logoutUser = () => {
@@ -51,85 +74,49 @@ const AuthProvider = ({ children }) => {
       confirmButtonText: "Yes, Logout",
     }).then((result) => {
       if (result.isConfirmed) {
-        signOut(auth)
-          .then(() => {
-            Swal.fire({
-              icon: "success",
-              title: "Logged Out!",
-              text: "You have been logged out successfully.",
-              showConfirmButton: false,
-              timer: 2000,
-            });
-          })
-          .catch((error) => {
-            Swal.fire({
-              icon: "error",
-              title: "Oops...",
-              text: error.message,
-            });
-          })
-          .finally(() => setLoading(false));
+        localStorage.removeItem(TOKEN_KEY);
+        setUser(null);
+        Swal.fire({
+          icon: "success",
+          title: "Logged Out!",
+          text: "You have been logged out successfully.",
+          showConfirmButton: false,
+          timer: 2000,
+        });
       }
     });
   };
 
-  const signInWithGoogle = () => {
-    setLoading(true);
-    return signInWithPopup(auth, googleProvider);
-  };
-
-  const resetPassword = (email) => {
-    setLoading(true);
-    return sendPasswordResetEmail(auth, email)
-      .then(() => {
-        Swal.fire({
-          icon: "success",
-          title: "Email Sent!",
-          text: "Password reset email has been sent. Check your inbox.",
-        });
-      })
-      .catch((error) => {
-        Swal.fire({
-          icon: "error",
-          title: "Oops...",
-          text: error.message,
-        });
-      })
-      .finally(() => setLoading(false));
-  };
-
   const updateUserProfile = async (name, photoURL) => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      await updateProfile(user, {
-        displayName: name,
-        photoURL: photoURL,
-      });
-
-      Swal.fire({
-        icon: "success",
-        title: "Profile Updated!",
-        text: "Your name and profile image have been updated successfully.",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Update Failed!",
-        text: error.message,
-      });
-    } finally {
-      setLoading(false);
-    }
+    Swal.fire({
+      icon: "info",
+      title: "Profile Update",
+      text: "Profile updates are not yet supported. Please contact support.",
+    });
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
       setLoading(false);
-    });
-    return () => {unsubscribe()};
+      return;
+    }
+
+    fetch("/api/auth/me", {
+      headers: { authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Invalid session");
+        return res.json();
+      })
+      .then((userData) => {
+        setUser(buildUser(userData, token));
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const authInfo = {
@@ -139,8 +126,6 @@ const AuthProvider = ({ children }) => {
     createUser,
     loginUser,
     logoutUser,
-    signInWithGoogle,
-    resetPassword,
     emailInput,
     setEmailInput,
     updateUserProfile,

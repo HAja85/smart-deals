@@ -24,3 +24,15 @@ dist-ssr
 *.sw?
 
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+.venv/
+env/
+venv/

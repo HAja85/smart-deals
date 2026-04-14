@@ -5,23 +5,15 @@ import {
   FaLock,
   FaEye,
   FaEyeSlash,
-  FaGoogle,
   FaUserPlus,
   FaImage,
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
-import { updateProfile } from "firebase/auth";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router";
 
 const SignUp = () => {
-  const {
-    createUser,
-    signInWithGoogle,
-    emailInput,
-    setEmailInput,
-    setLoading,
-  } = useContext(AuthContext);
+  const { createUser, emailInput, setEmailInput } = useContext(AuthContext);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
@@ -40,54 +32,14 @@ const SignUp = () => {
       return;
     }
 
-    createUser(email, password)
-      .then((result) => {
-        const user = result.user;
-        updateProfile(user, {
-          displayName,
-          photoURL,
-        })
-          .then(() => {
-            toast.success("Sign Up successful!");
-            e.target.reset();
-            setLoading(true);
-            navigate("/");
-          })
-          .catch((err) => console.log("Profile update failed:", err));
+    createUser(email, password, displayName, photoURL)
+      .then(() => {
+        toast.success("Sign Up successful!");
+        e.target.reset();
+        navigate("/");
       })
       .catch((error) => {
-        console.log("SignUp error:", error.message);
-        toast.error("Invalid email or password!");
-      });
-  };
-
-  const handleGoogleLogin = () => {
-    signInWithGoogle()
-      .then((result) => {
-        console.log(result.user);
-        const newUsers = {
-          name: result.user.displayName,
-          email: result.user.email,
-          image: result.user.photoURL,
-        };
-
-        fetch("https://smart-deals-server-five.vercel.app/users", {
-          method: "POST",
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify(newUsers),
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            console.log("data after users side", data);
-            toast.success("Login successful!");
-            navigate("/");
-          })
-      })
-      .catch((error) => {
-        console.log(error);
-        toast.error("Google login failed!");
+        toast.error(error.message || "Registration failed. Please try again.");
       });
   };
 
@@ -140,8 +92,7 @@ const SignUp = () => {
               <input
                 type="url"
                 name="photo"
-                required
-                placeholder="Paste your image URL"
+                placeholder="Paste your image URL (optional)"
                 className="w-full outline-none"
               />
             </div>
@@ -179,16 +130,6 @@ const SignUp = () => {
           >
             <FaUserPlus /> SignUp
           </button>
-
-          <div className="w-full flex items-center justify-center mt-4">
-            <button
-              onClick={handleGoogleLogin}
-              type="button"
-              className="w-full flex items-center justify-center gap-2 bg-sky-500 text-white px-4 py-2 rounded-lg hover:bg-sky-600 transition cursor-pointer"
-            >
-              <FaGoogle /> Google
-            </button>
-          </div>
 
           <p className="text-center text-sm text-gray-600 mt-4">
             Already have an account?{" "}

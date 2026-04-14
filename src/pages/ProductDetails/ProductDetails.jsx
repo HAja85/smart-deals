@@ -4,7 +4,6 @@ import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useEffect } from "react";
 import { useState } from "react";
-// import axios from 'axios';
 
 const ProductDetails = () => {
   const products = useLoaderData();
@@ -39,10 +38,10 @@ const ProductDetails = () => {
     bidMoadlRef.current.showModal();
   };
 
-  const handleBidSubmit = (e) => {
+  const handleBidSubmit = async (e) => {
     e.preventDefault();
     const name = e.target.name.value;
-    const email = e.target.email.value;
+    const bidEmail = e.target.email.value;
     const photoUrl = e.target.photoUrl.value;
     const bid = e.target.bid.value;
     const contact = e.target.contact.value;
@@ -50,9 +49,9 @@ const ProductDetails = () => {
     const newBid = {
       product_id: _id,
       buyer_name: name,
-      buyer_email: email,
+      buyer_email: bidEmail,
       buyer_photo: photoUrl,
-      bid_price: bid,
+      bid_price: parseFloat(bid),
       contact: contact,
       product_image: image,
       product_title: title,
@@ -60,47 +59,45 @@ const ProductDetails = () => {
       status: "pending",
     };
 
-    fetch("https://smart-deals-server-five.vercel.app/bids", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(newBid),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.insertedId) {
-          bidMoadlRef.current.close();
-          toast.success("Bid placed successfully!");
-          // add to the new bid state
-          newBid._id = data.insertedId;
-          const newBids = [...bids, newBid];
-          newBids.sort((a, b) => b.bid_price - a.bid_price);
-          setBids(newBids);
-        }
-      })
-      .catch(() => toast.error("Failed to place bid"));
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/bids", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(newBid),
+      });
+      const data = await res.json();
+      if (data.insertedId) {
+        bidMoadlRef.current.close();
+        toast.success("Bid placed successfully!");
+        newBid._id = data.insertedId;
+        const newBids = [...bids, newBid];
+        newBids.sort((a, b) => b.bid_price - a.bid_price);
+        setBids(newBids);
+      }
+    } catch {
+      toast.error("Failed to place bid");
+    }
   };
 
-  // useEffect(() => {
-  //   axios.get(`https://smart-deals-server-five.vercel.app/products/bids/${_id}`)
-  //   .then(data => {
-  //     console.log("bids for this data", data);
-  //     setBids(data.data);
-  //   })
-  // }, [_id, user]);
-
   useEffect(() => {
-    fetch(`https://smart-deals-server-five.vercel.app/products/bids/${_id}`, {
-      headers: {
-        authorization: `Bearer ${user.accessToken}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("bids for this data", data);
-        setBids(data);
-      });
+    if (!user || !_id) return;
+
+    user.getIdToken().then((token) => {
+      fetch(`/api/products/bids/${_id}`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setBids(Array.isArray(data) ? data : []);
+        })
+        .catch(() => setBids([]));
+    });
   }, [_id, user]);
 
   return (
@@ -253,10 +250,10 @@ const ProductDetails = () => {
                 Buyer Image URL
               </label>
               <input
-                type="url"
+                type="text"
                 name="photoUrl"
                 readOnly
-                defaultValue={user?.photoURL || "Photo"}
+                defaultValue={user?.photoURL || ""}
                 placeholder="https://your-img-url"
                 className="w-full border border-gray-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
               />
@@ -267,7 +264,7 @@ const ProductDetails = () => {
                 Place your Price
               </label>
               <input
-                type="text"
+                type="number"
                 name="bid"
                 placeholder="Your Bid"
                 required
@@ -307,7 +304,6 @@ const ProductDetails = () => {
         </div>
       </dialog>
 
-      {/* Bids Table */}
       <div className="max-w-[1510px] mx-auto mt-10 bg-white p-4 sm:p-6 rounded-lg shadow-md pb-8">
         <h2 className="text-2xl font-semibold text-gray-900 mb-5 flex items-center justify-between">
           <span>
@@ -327,7 +323,7 @@ const ProductDetails = () => {
                   Product
                 </th>
                 <th className="py-3 px-5 text-left font-semibold w-[280px]">
-                  Seller
+                  Buyer
                 </th>
                 <th className="py-3 px-5 text-left font-semibold w-[150px]">
                   Bid Price
@@ -372,12 +368,12 @@ const ProductDetails = () => {
                       <div className="flex items-center gap-3">
                         <img
                           src={bid.buyer_photo || "/placeholder.png"}
-                          alt={bid.buyer_name || "Seller"}
+                          alt={bid.buyer_name || "Buyer"}
                           className="w-10 h-10 rounded-full object-cover border"
                         />
                         <div>
                           <p className="font-semibold text-gray-900 text-sm">
-                            {bid.buyer_name || "Unknown Seller"}
+                            {bid.buyer_name || "Unknown"}
                           </p>
                           <p className="text-gray-500 text-xs">
                             {bid.buyer_email || "No email"}

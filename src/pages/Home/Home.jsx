@@ -13,9 +13,7 @@ const Home = () => {
     const fetchLatestProducts = async () => {
       try {
         setLoading(true);
-        const res = await fetch(
-          "https://smart-deals-server-five.vercel.app/latest-product"
-        );
+        const res = await fetch("/api/latest-product");
         const data = await res.json();
         setLatestProducts(data);
       } catch (error) {

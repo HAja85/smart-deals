@@ -4,7 +4,6 @@ import {
   FaLock,
   FaEye,
   FaEyeSlash,
-  FaGoogle,
   FaSignInAlt,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -12,8 +11,7 @@ import { useLocation, useNavigate } from "react-router";
 import { AuthContext } from "../../context/AuthContext";
 
 const Login = () => {
-  const { loginUser, signInWithGoogle, emailInput, setEmailInput } =
-    useContext(AuthContext);
+  const { loginUser, emailInput, setEmailInput } = useContext(AuthContext);
   const [showPassword, setShowPassword] = useState(false);
 
   const location = useLocation();
@@ -32,38 +30,7 @@ const Login = () => {
         navigate(from, { replace: true });
       })
       .catch((error) => {
-        console.log(error);
-        toast.error("Invalid email or password!");
-      });
-  };
-
-  const handleGoogleLogin = () => {
-    signInWithGoogle()
-      .then((result) => {
-        console.log(result.user);
-        const newUsers = {
-          name: result.user.displayName,
-          email: result.user.email,
-          image: result.user.photoURL,
-        };
-
-        fetch("https://smart-deals-server-five.vercel.app/users", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(newUsers),
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            console.log("data after users side", data);
-            toast.success("Login successful!");
-            navigate("/");
-          });
-      })
-      .catch((error) => {
-        console.log(error);
-        toast.error("Google login failed!");
+        toast.error(error.message || "Invalid email or password!");
       });
   };
 
@@ -114,15 +81,6 @@ const Login = () => {
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </button>
             </div>
-
-            <p
-              onClick={() =>
-                navigate("/forget-password", { state: { email: emailInput } })
-              }
-              className="text-center text-[#34699A] font-medium text-sm cursor-pointer hover:underline mt-3"
-            >
-              Forgot Password?
-            </p>
           </div>
 
           <button
@@ -131,16 +89,6 @@ const Login = () => {
           >
             <FaSignInAlt /> Login
           </button>
-
-          <div className="w-full flex items-center justify-center mt-4">
-            <button
-              onClick={handleGoogleLogin}
-              type="button"
-              className="w-full flex items-center justify-center gap-2 bg-sky-500 text-white px-4 py-2 rounded-lg hover:bg-sky-600 transition cursor-pointer"
-            >
-              <FaGoogle /> Google
-            </button>
-          </div>
 
           <p className="text-center text-sm text-gray-600 mt-4">
             Don't have an account?{" "}

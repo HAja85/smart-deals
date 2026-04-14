@@ -48,8 +48,6 @@ export const router = createBrowserRouter([
             <MyBids />
           </PrivetRoutes>
         ),
-        loader: ({ params }) =>
-          fetch(`https://smart-deals-server-five.vercel.app/products/${params.id}`),
       },
       {
         path: "productDetail/:id",
@@ -58,8 +56,7 @@ export const router = createBrowserRouter([
             <ProductDetails />
           </PrivetRoutes>
         ),
-        loader: ({ params }) =>
-          fetch(`https://smart-deals-server-five.vercel.app/products/${params.id}`),
+        loader: ({ params }) => fetch(`/api/products/${params.id}`),
       },
       {
         path: "/create-product",
