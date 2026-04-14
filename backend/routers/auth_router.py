@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional
 from backend.database import get_connection
 from backend.auth import hash_password, verify_password, create_access_token, decode_token
@@ -14,6 +14,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     image: Optional[str] = None
+    role: Optional[str] = "consumer"
 
 
 class LoginRequest(BaseModel):
@@ -28,8 +29,9 @@ def format_user(row: dict, token: str = None) -> dict:
         "name": row["name"],
         "displayName": row["name"],
         "email": row["email"],
-        "image": row["image"] or "",
-        "photoURL": row["image"] or "",
+        "image": row.get("image") or "",
+        "photoURL": row.get("image") or "",
+        "role": row.get("role", "consumer"),
         **({"accessToken": token} if token else {}),
     }
 
@@ -47,6 +49,8 @@ def register(req: RegisterRequest):
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
+    role = req.role if req.role in ("supplier", "consumer") else "consumer"
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -56,13 +60,13 @@ def register(req: RegisterRequest):
 
         hashed = hash_password(req.password)
         cur.execute(
-            "INSERT INTO users (name, email, password_hash, image) VALUES (%s, %s, %s, %s) RETURNING *",
-            (req.name, req.email, hashed, req.image),
+            "INSERT INTO users (name, email, password_hash, image, role) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+            (req.name, req.email, hashed, req.image, role),
         )
         user = dict(cur.fetchone())
         conn.commit()
 
-        token = create_access_token({"sub": str(user["id"]), "email": user["email"]})
+        token = create_access_token({"sub": str(user["id"]), "email": user["email"], "role": user["role"]})
         return {"user": format_user(user, token), "token": token}
     finally:
         cur.close()
@@ -86,7 +90,7 @@ def login(req: LoginRequest):
         if not verify_password(req.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        token = create_access_token({"sub": str(user["id"]), "email": user["email"]})
+        token = create_access_token({"sub": str(user["id"]), "email": user["email"], "role": user.get("role", "consumer")})
         return {"user": format_user(user, token), "token": token}
     finally:
         cur.close()

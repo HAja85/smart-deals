@@ -21,44 +21,58 @@ def init_db():
             email VARCHAR(255) UNIQUE NOT NULL,
             password_hash VARCHAR(255),
             image VARCHAR(500),
+            role VARCHAR(50) DEFAULT 'consumer',
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'consumer'")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS products (
             id SERIAL PRIMARY KEY,
             title VARCHAR(500) NOT NULL,
             category VARCHAR(255),
-            price_min NUMERIC(10,2),
-            price_max NUMERIC(10,2),
-            condition VARCHAR(100),
-            usage VARCHAR(255),
+            description TEXT,
             image VARCHAR(500),
+            brand VARCHAR(255),
+            unit VARCHAR(100),
+            seller_id INTEGER REFERENCES users(id),
             seller_name VARCHAR(255),
             seller_email VARCHAR(255),
             seller_contact VARCHAR(100),
             seller_image VARCHAR(500),
             location VARCHAR(255),
-            description TEXT,
-            status VARCHAR(50) DEFAULT 'pending',
+            status VARCHAR(50) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS brand VARCHAR(255)")
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS unit VARCHAR(100)")
+    cur.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS seller_id INTEGER REFERENCES users(id)")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS deals (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+            seller_id INTEGER REFERENCES users(id),
+            target_quantity INTEGER NOT NULL,
+            current_quantity INTEGER DEFAULT 0,
+            price_per_unit NUMERIC(10,3) NOT NULL,
+            start_time TIMESTAMP DEFAULT NOW(),
+            end_time TIMESTAMP NOT NULL,
+            status VARCHAR(50) DEFAULT 'Active',
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS bids (
+        CREATE TABLE IF NOT EXISTS orders (
             id SERIAL PRIMARY KEY,
-            product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-            buyer_name VARCHAR(255),
-            buyer_email VARCHAR(255),
-            buyer_photo VARCHAR(500),
-            bid_price NUMERIC(10,2),
-            contact VARCHAR(100),
-            product_image VARCHAR(500),
-            product_title VARCHAR(500),
-            product_price NUMERIC(10,2),
-            status VARCHAR(50) DEFAULT 'pending',
+            user_id INTEGER REFERENCES users(id),
+            deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL,
+            total_amount NUMERIC(10,3),
+            payment_status VARCHAR(50) DEFAULT 'Pending',
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)

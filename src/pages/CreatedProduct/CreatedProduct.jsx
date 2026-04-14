@@ -4,6 +4,14 @@ import { FaArrowLeft } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import Swal from "sweetalert2";
 
+const CATEGORIES = [
+  "Grains & Rice", "Oils & Fats", "Beverages", "Dairy", "Eggs & Poultry",
+  "Sugar & Sweeteners", "Instant Food", "Canned Goods", "Frozen Foods", "Snacks",
+  "Cleaning Supplies", "Household", "Pasta & Noodles", "Breakfast", "Spreads",
+  "Spices", "Dried Fruits", "Nuts & Seeds", "Baking", "Condiments",
+  "Bread & Bakery", "Cooking Essentials",
+];
+
 const CreatedProduct = () => {
   const { user } = useContext(AuthContext);
 
@@ -12,321 +20,94 @@ const CreatedProduct = () => {
     const formData = {
       title: e.target.title.value,
       category: e.target.category.value,
-      price_min: parseFloat(e.target.minPrice.value) || 0,
-      price_max: parseFloat(e.target.maxPrice.value) || parseFloat(e.target.minPrice.value) || 0,
-      condition: e.target.condition.value,
-      usage: e.target.usageTime.value,
+      brand: e.target.brand.value,
+      unit: e.target.unit.value,
       image: e.target.productImageUrl.value,
-      seller_name: e.target.name.value,
-      sellerEmail: e.target.email.value,
+      seller_name: e.target.sellerName.value,
       seller_contact: e.target.sellerContact.value,
-      seller_image: e.target.sellerImageUrl.value,
       location: e.target.location.value,
       description: e.target.description.value,
-      email: e.target.email.value,
-      status: "pending",
     };
-
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/products", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify(formData),
       });
       const data = await res.json();
-      if (data.insertedId) {
-        Swal.fire({
-          title: "Product Added",
-          icon: "success",
-          draggable: true,
-        });
-        e.target.reset();
-      }
+      if (!res.ok) throw new Error(data.detail || "Failed to create product");
+      Swal.fire({ title: "Product Added!", text: "You can now create a deal for this product.", icon: "success" });
+      e.target.reset();
     } catch (err) {
-      Swal.fire({
-        title: "Error",
-        text: "Failed to create product. Please try again.",
-        icon: "error",
-      });
+      Swal.fire({ title: "Error", text: err.message, icon: "error" });
     }
   };
 
+  const inputCls = "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition text-sm";
+  const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <Link to="/allproduct">
-          <button className="flex items-center gap-2 text-gray-700 hover:text-[#34699A] transition mb-6 cursor-pointer">
-            <FaArrowLeft className="w-5 h-5" />
-            Back To Products
-          </button>
+      <div className="max-w-3xl mx-auto">
+        <Link to="/my-products" className="flex items-center gap-2 text-gray-600 hover:text-[#34699A] transition mb-6 text-sm font-medium">
+          <FaArrowLeft /> Back to My Products
         </Link>
 
-        <h1 className="text-4xl font-bold text-center text-[#34699A] mb-8">
-          Create A Product
-        </h1>
+        <h1 className="text-3xl font-bold text-center text-[#34699A] mb-8">Add New Product</h1>
 
-        <form
-          onSubmit={handleCreateProduct}
-          className="bg-white rounded-2xl shadow-xl p-8 space-y-6"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleCreateProduct} className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label
-                htmlFor="title"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Title
-              </label>
-              <input
-                type="text"
-                id="title"
-                name="title"
-                placeholder="Product Name"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              />
+              <label className={labelCls}>Product Title *</label>
+              <input type="text" name="title" required placeholder="e.g. Basmati Rice Premium" className={inputCls} />
             </div>
-
             <div>
-              <label
-                htmlFor="category"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Category
-              </label>
-              <select
-                id="category"
-                name="category"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              >
+              <label className={labelCls}>Category *</label>
+              <select name="category" required className={inputCls}>
                 <option value="">Select a Category</option>
-                <option>Art and Hobbies</option>
-                <option>Electronics</option>
-                <option>Fashion</option>
-                <option>Home & Living</option>
-                <option>Automotive</option>
-                <option>Books & Magazines</option>
-                <option>Health & Beauty</option>
-                <option>Sports & Outdoors</option>
-                <option>Toys & Games</option>
-                <option>Pet Supplies</option>
-                <option>Food & Beverages</option>
-                <option>Office Supplies</option>
-                <option>Music Instruments</option>
-                <option>Collectibles</option>
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
-
             <div>
-              <label
-                htmlFor="minPrice"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Min Price You want to Sale ($)
-              </label>
-              <input
-                type="number"
-                id="minPrice"
-                name="minPrice"
-                placeholder="e.g. 18.5"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              />
+              <label className={labelCls}>Brand *</label>
+              <input type="text" name="brand" required placeholder="e.g. Al-Doha, Hayat, Almarai" className={inputCls} />
             </div>
-
             <div>
-              <label
-                htmlFor="maxPrice"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Max Price You want to Sale ($)
-              </label>
-              <input
-                type="number"
-                id="maxPrice"
-                name="maxPrice"
-                placeholder="Optional (default = Min Price)"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-              />
+              <label className={labelCls}>Unit *</label>
+              <input type="text" name="unit" required placeholder="e.g. 25kg bag, 12 × 1L, 30 eggs" className={inputCls} />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Product Condition
-            </label>
-            <div className="flex gap-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="condition"
-                  value="Brand New"
-                  className="w-5 h-5 text-primary focus:ring-[#34699A]"
-                  required
-                />
-                <span className="text-gray-700">Brand New</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="condition"
-                  value="Used"
-                  className="w-5 h-5 text-primary focus:ring-[#34699A]"
-                />
-                <span className="text-gray-700">Used</span>
-              </label>
+            <label className={labelCls}>Product Image URL *</label>
+            <input type="url" name="productImageUrl" required placeholder="https://..." className={inputCls} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className={labelCls}>Seller / Company Name</label>
+              <input type="text" name="sellerName" defaultValue={user?.displayName || ""} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Contact Number</label>
+              <input type="tel" name="sellerContact" placeholder="+965 2200 0000" className={inputCls} />
             </div>
           </div>
 
           <div>
-            <label
-              htmlFor="usageTime"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Product Usage time
-            </label>
-            <input
-              type="text"
-              id="usageTime"
-              name="usageTime"
-              placeholder="Usage Time"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-            />
+            <label className={labelCls}>Location</label>
+            <input type="text" name="location" placeholder="e.g. Salmiya, Kuwait City" className={inputCls} />
           </div>
 
           <div>
-            <label
-              htmlFor="productImageUrl"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Your Product Image URL
-            </label>
-            <input
-              type="url"
-              id="productImageUrl"
-              name="productImageUrl"
-              placeholder="https://..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-              required
-            />
+            <label className={labelCls}>Product Description *</label>
+            <textarea name="description" rows={3} required placeholder="Describe the product — quality, origin, use case..." className={`${inputCls} resize-none`} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label
-                htmlFor="sellerName"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Seller Name
-              </label>
-              <input
-                type="text"
-                id="sellerName"
-                name="name"
-                defaultValue={user?.displayName || ""}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="sellerEmail"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Seller Email
-              </label>
-              <input
-                type="email"
-                id="sellerEmail"
-                name="email"
-                defaultValue={user?.email || ""}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="sellerContact"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Seller Contact
-              </label>
-              <input
-                type="tel"
-                id="sellerContact"
-                name="sellerContact"
-                placeholder="Your Contact Number"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="sellerImageUrl"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Seller Image URL
-              </label>
-              <input
-                type="url"
-                id="sellerImageUrl"
-                name="sellerImageUrl"
-                defaultValue={user?.photoURL || ""}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="location"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Location
-            </label>
-            <input
-              type="text"
-              id="location"
-              name="location"
-              placeholder="City, Country"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition"
-              required
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="description"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Simple Description about your Product
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              rows={4}
-              placeholder="Write Your Products Details for More Attention"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#34699A] focus:border-transparent outline-none transition resize-none"
-              required
-            ></textarea>
-          </div>
-
-          <div className="pt-4">
-            <button
-              type="submit"
-              className="bg-[#34699A] text-white font-medium w-full py-2 rounded-lg shadow hover:border hover:border-[#34699A] hover:bg-transparent hover:text-[#34699A] transition cursor-pointer"
-            >
-              Create A Product
-            </button>
-          </div>
+          <button type="submit" className="w-full py-3 bg-gradient-to-r from-[#34699A] to-[#58A0C8] text-white font-semibold rounded-xl hover:opacity-90 transition cursor-pointer">
+            Add Product
+          </button>
         </form>
       </div>
     </div>

@@ -1,0 +1,259 @@
+Transform the existing peer-to-peer bidding marketplace into a modern group-buying marketplace for supermarket deals in Kuwait.
+
+=====================
+CORE ARCHITECTURE
+=====================
+
+Keep Product as master entity. Introduce Deal as child entity.
+
+1. Product (existing - keep as is)
+- id
+- title
+- category
+- description
+- image
+- brand (NEW - for supermarket use)
+- unit (e.g., carton, pack, kg)
+- seller_id
+
+2. Deal (new model)
+- id
+- product_id (FK)
+- seller_id
+- target_quantity
+- current_quantity (default 0)
+- price_per_unit
+- start_time
+- end_time
+- status (Active, Successful, Failed)
+
+3. Order (replace bidding)
+- id
+- user_id
+- deal_id
+- quantity
+- total_amount
+- payment_status (Pending, Authorized, Captured, Cancelled)
+- created_at
+
+=====================
+USER ROLES
+=====================
+
+Seed and enforce 2 roles:
+
+1. Supplier (Seller)
+- Can create products
+- Can create deals
+
+2. Consumer (Buyer)
+- Cannot create products
+- Cannot create deals
+- Can only:
+    - browse products/deals
+    - place orders
+
+Enforce role-based access in APIs.
+
+=====================
+REMOVE OLD FEATURES
+=====================
+
+- Remove bidding system completely
+- Remove bid leaderboard
+- Remove accept/reject bid
+- Remove My Bids
+
+=====================
+SEED DATA (IMPORTANT)
+=====================
+
+Seed database with:
+
+Users:
+- 1 Supplier user
+- 1 Consumer user
+
+Products:
+- At least 50 supermarket-related products:
+    Examples:
+    - Rice bags
+    - Cooking oil
+    - Water cartons
+    - Milk packs
+    - Eggs trays
+    - Frozen food
+    - Snacks
+    - Cleaning supplies
+
+Deals:
+- Create deals for multiple products
+- Vary:
+    - target_quantity
+    - price_per_unit
+    - end_time (some near expiry, some long)
+
+Orders:
+- Seed multiple orders from different users
+- Ensure:
+    - some deals reach success
+    - some deals fail
+
+=====================
+BUSINESS LOGIC
+=====================
+
+1. Join Deal
+- Consumer selects quantity
+- Validate:
+    - deal is Active
+    - current time < end_time
+- Create order
+- Increase:
+    deal.current_quantity += quantity
+
+2. Deal Success
+- If current_quantity >= target_quantity BEFORE end_time:
+    - status = Successful
+    - update all orders → payment_status = Captured
+
+3. Deal Failure
+- If end_time reached AND target not met:
+    - status = Failed
+    - update all orders → payment_status = Cancelled
+
+=====================
+BACKGROUND JOB
+=====================
+
+Create scheduled job (runs every minute):
+
+For each Active deal:
+    IF now >= end_time:
+        IF current_quantity >= target_quantity:
+            mark Successful
+        ELSE:
+            mark Failed
+
+=====================
+API ENDPOINTS
+=====================
+
+- GET /products
+- GET /products/{id}
+
+- POST /deals (supplier only)
+- GET /deals
+- GET /deals/{id}
+
+- POST /orders (consumer only)
+- GET /my-orders
+
+- GET /my-products (supplier)
+- GET /my-deals (supplier)
+
+=====================
+SEARCH FUNCTIONALITY
+=====================
+
+Implement search:
+
+- Search by:
+    - product name
+    - category
+    - brand
+
+- Add API:
+    GET /search?q=
+
+- Ensure search works on frontend
+
+=====================
+FRONTEND CHANGES
+=====================
+
+1. Home Page
+- Update banner to supermarket deals theme (Kuwait context)
+- Add:
+    - “Best Bulk Deals”
+    - “Save More with Group Buying”
+- Update testimonials section (rename to "Clients Say")
+- Remove social media icons from footer
+- Clean, modern UI
+
+2. All Deals Page
+- Show:
+    - product image
+    - price per unit
+    - target vs current quantity
+    - progress bar
+    - countdown timer (IMPORTANT)
+
+3. Deal Detail Page
+- Show:
+    - product info
+    - supplier info
+    - timer
+    - quantity selector
+    - “Join Deal” button
+
+4. My Orders Page
+- Show:
+    - deal status
+    - order quantity
+    - payment status
+
+=====================
+COUNTDOWN TIMER
+=====================
+
+- Display timer:
+    remaining_time = end_time - current_time
+- Show on:
+    - deal cards
+    - deal detail page
+- Auto update every second
+
+=====================
+KUWAIT LOCALIZATION
+=====================
+
+- Currency: Kuwaiti Dinar (KWD)
+- Display symbol: د.ك or KWD
+- Format prices properly
+
+=====================
+UI/UX IMPROVEMENTS
+=====================
+
+Make application visually rich and user-friendly:
+
+- Use modern card-based layout
+- Add:
+    - smooth hover effects
+    - loading skeletons
+    - animations
+- Use consistent color palette (green/blue for trust & savings)
+- Mobile responsive design
+- Clear CTA buttons (Join Deal)
+
+=====================
+VALIDATION RULES
+=====================
+
+- No negative quantity
+- Cannot join expired deal
+- Only consumers can place orders
+- Only suppliers can create deals/products
+
+=====================
+OUTPUT REQUIREMENT
+=====================
+
+Generate:
+- Updated models
+- Seed scripts
+- API routes
+- Role-based middleware
+- Background job
+- UI improvements
