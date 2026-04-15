@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
-from backend.database import init_db, seed_db, get_connection
+from backend.database import init_db, seed_db, seed_demo_data, get_connection
 from backend.routers import auth_router, products, deals, orders, search, notifications, admin
 from backend.routers.notifications import create_notification
 from backend.services import payment_service
@@ -157,6 +157,7 @@ scheduler.add_job(check_deal_statuses, "interval", minutes=1)
 def startup():
     init_db()
     seed_db()
+    seed_demo_data()
     scheduler.start()
     print("Deal status scheduler started")
 
