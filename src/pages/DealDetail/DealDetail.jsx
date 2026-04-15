@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { FaClock, FaUsers, FaArrowLeft, FaShoppingCart, FaTag, FaBoxOpen } from "react-icons/fa";
+import { FaClock, FaUsers, FaArrowLeft, FaShoppingCart, FaTag, FaBoxOpen, FaPercent, FaCalendarAlt } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useCountdown } from "../../hooks/useCountdown";
@@ -16,6 +16,30 @@ const CountdownBlock = ({ endTime }) => {
           <span className="text-xs mt-0.5 text-blue-200">{label}</span>
         </div>
       ))}
+    </div>
+  );
+};
+
+const StartCountdown = ({ startTime }) => {
+  const t = useCountdown(startTime);
+  const pad = (n) => String(n).padStart(2, "0");
+  if (t.expired) return null;
+  return (
+    <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5">
+      <h3 className="font-semibold text-purple-700 mb-3 text-center flex items-center justify-center gap-2">
+        <FaCalendarAlt /> Deal Starts In
+      </h3>
+      <div className="flex gap-3 justify-center">
+        {[["days", "Days"], ["hours", "Hrs"], ["minutes", "Min"], ["seconds", "Sec"]].map(([key, label]) => (
+          <div key={key} className="flex flex-col items-center bg-purple-600 text-white rounded-xl px-4 py-2 min-w-[64px]">
+            <span className="text-2xl font-bold font-mono">{pad(t[key] || 0)}</span>
+            <span className="text-xs mt-0.5 text-purple-200">{label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-purple-600 text-xs mt-3">
+        Starts {new Date(startTime).toLocaleString("en-KW", { dateStyle: "medium", timeStyle: "short" })}
+      </p>
     </div>
   );
 };
@@ -39,7 +63,7 @@ const DealDetail = () => {
 
   const handleJoin = async () => {
     if (!user) { toast.info("Please login to join a deal"); navigate("/login"); return; }
-    if (user.role === "supplier") { toast.error("Suppliers cannot place orders. Use a consumer account."); return; }
+    if (user.role === "supplier") { toast.error("Suppliers cannot place orders. Switch to a consumer account."); return; }
     if (qty < 1) { toast.error("Quantity must be at least 1"); return; }
     setJoining(true);
     try {
@@ -51,7 +75,7 @@ const DealDetail = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to join deal");
-      toast.success(`Successfully joined the deal! Order total: ${parseFloat(data.total_amount).toFixed(3)} KWD`);
+      toast.success(`Joined! Total: ${parseFloat(data.total_amount).toFixed(3)} KWD`);
       const updated = await fetch(`/api/deals/${id}`).then(r => r.json());
       setDeal(updated);
     } catch (err) {
@@ -71,7 +95,9 @@ const DealDetail = () => {
   const product = deal.product || {};
   const progress = deal.progress_percent || 0;
   const isActive = deal.status === "Active";
+  const isUpcoming = deal.status === "Upcoming";
   const total = (parseFloat(deal.price_per_unit) * qty).toFixed(3);
+  const discountPct = deal.discount_percent || 0;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -82,31 +108,33 @@ const DealDetail = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <div className="rounded-2xl overflow-hidden shadow-lg">
+            <div className="rounded-2xl overflow-hidden shadow-lg relative">
               <img src={product.image || "https://placehold.co/600x400?text=Product"} alt={product.title} className="w-full h-72 object-cover" />
+              {discountPct > 0 && (
+                <div className="absolute top-4 right-4 bg-red-500 text-white font-bold text-sm px-3 py-1.5 rounded-full shadow-lg">
+                  Save {discountPct}%
+                </div>
+              )}
             </div>
 
-            {product.brand && (
-              <div className="mt-4 p-4 bg-white rounded-xl shadow-sm flex items-center gap-3">
-                <FaTag className="text-[#34699A]" />
-                <div>
-                  <p className="text-xs text-gray-500">Brand</p>
-                  <p className="font-semibold text-gray-800">{product.brand}</p>
+            <div className="mt-4 p-4 bg-white rounded-xl shadow-sm grid grid-cols-2 gap-4">
+              {product.brand && (
+                <div className="flex items-center gap-2">
+                  <FaTag className="text-[#34699A]" />
+                  <div><p className="text-xs text-gray-500">Brand</p><p className="font-semibold text-gray-800 text-sm">{product.brand}</p></div>
                 </div>
-                {product.unit && <>
-                  <div className="w-px h-8 bg-gray-200 mx-2" />
+              )}
+              {product.unit && (
+                <div className="flex items-center gap-2">
                   <FaBoxOpen className="text-emerald-600" />
-                  <div>
-                    <p className="text-xs text-gray-500">Unit</p>
-                    <p className="font-semibold text-gray-800">{product.unit}</p>
-                  </div>
-                </>}
-              </div>
-            )}
+                  <div><p className="text-xs text-gray-500">Unit</p><p className="font-semibold text-gray-800 text-sm">{product.unit}</p></div>
+                </div>
+              )}
+            </div>
 
             {product.description && (
               <div className="mt-4 p-4 bg-white rounded-xl shadow-sm">
-                <h3 className="font-semibold text-gray-700 mb-2">Description</h3>
+                <h3 className="font-semibold text-gray-700 mb-2 text-sm">Description</h3>
                 <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
               </div>
             )}
@@ -116,24 +144,48 @@ const DealDetail = () => {
             <div className="bg-white rounded-2xl shadow-md p-6">
               <div className="flex items-start justify-between mb-2">
                 <h1 className="text-2xl font-bold text-gray-900 leading-tight">{product.title}</h1>
-                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ml-3 ${isActive ? "bg-emerald-100 text-emerald-700" : deal.status === "Successful" ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-600"}`}>
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full shrink-0 ml-3 ${
+                  isActive ? "bg-emerald-100 text-emerald-700" :
+                  isUpcoming ? "bg-purple-100 text-purple-700" :
+                  deal.status === "Successful" ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-600"
+                }`}>
                   {deal.status}
                 </span>
               </div>
               <p className="text-sm text-gray-500 mb-4">{product.category}</p>
-              <div className="text-3xl font-bold text-[#34699A] mb-1">
-                {parseFloat(deal.price_per_unit).toFixed(3)} <span className="text-lg font-normal text-gray-500">KWD / unit</span>
+
+              <div className="flex items-end gap-4 flex-wrap">
+                {deal.actual_price && (
+                  <div>
+                    <p className="text-xs text-gray-400">Market Price</p>
+                    <p className="text-lg text-gray-400 line-through">{parseFloat(deal.actual_price).toFixed(3)} KWD</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-500">{deal.actual_price ? "Deal Price" : "Price per unit"}</p>
+                  <p className="text-3xl font-bold text-[#34699A]">
+                    {parseFloat(deal.price_per_unit).toFixed(3)} <span className="text-base font-normal text-gray-500">KWD</span>
+                  </p>
+                </div>
+                {discountPct > 0 && (
+                  <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-full">
+                    <FaPercent className="text-xs" /><span className="font-bold text-sm">Save {discountPct}%</span>
+                  </div>
+                )}
               </div>
             </div>
+
+            {isUpcoming && deal.start_time && <StartCountdown startTime={deal.start_time} />}
 
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2"><FaUsers className="text-[#34699A]" /> Deal Progress</h3>
               <div className="flex justify-between text-sm text-gray-600 mb-2">
                 <span>{deal.current_quantity} units ordered</span>
-                <span>Target: {deal.target_quantity} units</span>
+                <span>Target: {deal.target_quantity}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-3 mb-1">
-                <div className={`h-3 rounded-full transition-all ${progress >= 100 ? "bg-emerald-500" : "bg-gradient-to-r from-[#34699A] to-emerald-400"}`} style={{ width: `${Math.min(progress, 100)}%` }} />
+                <div className={`h-3 rounded-full transition-all ${progress >= 100 ? "bg-emerald-500" : "bg-gradient-to-r from-[#34699A] to-emerald-400"}`}
+                  style={{ width: `${Math.min(progress, 100)}%` }} />
               </div>
               <p className="text-right text-xs text-gray-400">{progress}% complete</p>
             </div>
@@ -157,25 +209,36 @@ const DealDetail = () => {
                   </div>
                 </div>
                 <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 mb-4">
-                  <span className="text-gray-600 text-sm">Total Amount:</span>
-                  <span className="text-xl font-bold text-[#34699A]">{total} KWD</span>
+                  <span className="text-gray-600 text-sm">Total:</span>
+                  <div className="text-right">
+                    <span className="text-xl font-bold text-[#34699A]">{total} KWD</span>
+                    {discountPct > 0 && deal.actual_price && (
+                      <p className="text-xs text-emerald-600">You save {((parseFloat(deal.actual_price) - parseFloat(deal.price_per_unit)) * qty).toFixed(3)} KWD</p>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handleJoin}
-                  disabled={joining}
-                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold rounded-xl hover:opacity-90 transition disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
-                >
+                <button onClick={handleJoin} disabled={joining}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold rounded-xl hover:opacity-90 transition disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer">
                   {joining ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FaShoppingCart />}
                   {joining ? "Joining..." : "Join Deal"}
                 </button>
-                {!user && <p className="text-center text-xs text-gray-400 mt-2">You must be logged in as a consumer to join</p>}
+                {!user && <p className="text-center text-xs text-gray-400 mt-2">Login as a consumer to join</p>}
               </div>
             )}
 
-            {!isActive && (
+            {isUpcoming && (
+              <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 text-center">
+                <p className="font-semibold text-purple-700">This deal hasn't started yet</p>
+                <p className="text-sm text-purple-500 mt-1">Come back when it goes live to join!</p>
+              </div>
+            )}
+
+            {!isActive && !isUpcoming && (
               <div className={`rounded-2xl p-5 text-center ${deal.status === "Successful" ? "bg-blue-50 border border-blue-200" : "bg-red-50 border border-red-200"}`}>
-                <p className="font-semibold text-lg">{deal.status === "Successful" ? "🎉 Deal Succeeded!" : "❌ Deal Expired"}</p>
-                <p className="text-sm text-gray-500 mt-1">{deal.status === "Successful" ? "All orders have been captured." : "This deal did not reach its target."}</p>
+                <p className="font-semibold text-lg">{deal.status === "Successful" ? "🎉 Deal Succeeded!" : deal.status === "Stopped" ? "🛑 Deal Stopped" : "❌ Deal Expired"}</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {deal.status === "Successful" ? "All orders captured." : deal.status === "Stopped" ? "The supplier stopped this deal." : "Target not reached in time."}
+                </p>
               </div>
             )}
           </div>

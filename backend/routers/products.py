@@ -43,6 +43,15 @@ def format_product(row: dict) -> dict:
     return d
 
 
+class ProductUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+    brand: Optional[str] = None
+    unit: Optional[str] = None
+
+
 class ProductCreate(BaseModel):
     title: str
     category: Optional[str] = None
@@ -126,6 +135,34 @@ def create_product(data: ProductCreate, user=Depends(supplier_only)):
         result = format_product(dict(row))
         result["insertedId"] = result["id"]
         return result
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.patch("/{product_id}")
+def update_product(product_id: int, data: ProductUpdate, user=Depends(supplier_only)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM products WHERE id = %s AND seller_id = %s", (product_id, int(user["sub"])))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Product not found or access denied")
+
+        updates = []
+        values = []
+        for field in ["title", "category", "description", "image", "brand", "unit"]:
+            val = getattr(data, field)
+            if val is not None:
+                updates.append(f"{field} = %s")
+                values.append(val)
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        values.append(product_id)
+        cur.execute(f"UPDATE products SET {', '.join(updates)} WHERE id = %s RETURNING *", values)
+        row = cur.fetchone()
+        conn.commit()
+        return format_product(dict(row))
     finally:
         cur.close()
         conn.close()

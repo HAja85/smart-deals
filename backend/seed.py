@@ -71,26 +71,30 @@ PRODUCTS = [
 ]
 
 DEALS_CONFIG = [
-    {"product_idx": 0,  "target": 100, "price": 8.500,  "days": 7},
-    {"product_idx": 2,  "target": 80,  "price": 3.750,  "days": 5},
-    {"product_idx": 4,  "target": 200, "price": 2.200,  "days": 3},
-    {"product_idx": 5,  "target": 150, "price": 4.800,  "days": 6},
-    {"product_idx": 7,  "target": 300, "price": 1.250,  "days": 4},
-    {"product_idx": 9,  "target": 120, "price": 2.900,  "days": 10},
-    {"product_idx": 12, "target": 90,  "price": 3.500,  "days": 8},
-    {"product_idx": 14, "target": 200, "price": 1.800,  "days": 2},
-    {"product_idx": 18, "target": 60,  "price": 12.000, "days": 14},
-    {"product_idx": 20, "target": 500, "price": 5.750,  "days": 5},
-    {"product_idx": 22, "target": 100, "price": 3.200,  "days": 7},
-    {"product_idx": 28, "target": 80,  "price": 1.900,  "days": 3},
-    {"product_idx": 33, "target": 150, "price": 2.400,  "days": 6},
-    {"product_idx": 38, "target": 200, "price": 18.500, "days": 12},
-    {"product_idx": 39, "target": 70,  "price": 9.800,  "days": 9},
-    {"product_idx": 45, "target": 120, "price": 4.200,  "days": 4},
-    {"product_idx": 46, "target": 90,  "price": 6.500,  "days": 7},
-    {"product_idx": 47, "target": 250, "price": 1.100,  "days": 5},
-    {"product_idx": 48, "target": 200, "price": 1.350,  "days": 3},
-    {"product_idx": 49, "target": 60,  "price": 2.800,  "days": 10},
+    {"product_idx": 0,  "target": 100, "actual": 9.750,  "price": 8.500,  "days": 7,  "start_days": 0},
+    {"product_idx": 2,  "target": 80,  "actual": 4.400,  "price": 3.750,  "days": 5,  "start_days": 0},
+    {"product_idx": 4,  "target": 200, "actual": 2.500,  "price": 2.200,  "days": 3,  "start_days": 0},
+    {"product_idx": 5,  "target": 150, "actual": 5.500,  "price": 4.800,  "days": 6,  "start_days": 0},
+    {"product_idx": 7,  "target": 300, "actual": 1.406,  "price": 1.250,  "days": 4,  "start_days": 0},
+    {"product_idx": 9,  "target": 120, "actual": 3.350,  "price": 2.900,  "days": 10, "start_days": 0},
+    {"product_idx": 12, "target": 90,  "actual": 4.100,  "price": 3.500,  "days": 8,  "start_days": 0},
+    {"product_idx": 14, "target": 200, "actual": 2.100,  "price": 1.800,  "days": 2,  "start_days": 0},
+    {"product_idx": 18, "target": 60,  "actual": 14.000, "price": 12.000, "days": 14, "start_days": 0},
+    {"product_idx": 20, "target": 500, "actual": 6.800,  "price": 5.750,  "days": 5,  "start_days": 0},
+    {"product_idx": 22, "target": 100, "actual": 3.800,  "price": 3.200,  "days": 7,  "start_days": 0},
+    {"product_idx": 28, "target": 80,  "actual": 2.250,  "price": 1.900,  "days": 3,  "start_days": 0},
+    {"product_idx": 33, "target": 150, "actual": 2.900,  "price": 2.400,  "days": 6,  "start_days": 0},
+    {"product_idx": 38, "target": 200, "actual": 22.000, "price": 18.500, "days": 12, "start_days": 0},
+    {"product_idx": 39, "target": 70,  "actual": 11.500, "price": 9.800,  "days": 9,  "start_days": 0},
+    {"product_idx": 45, "target": 120, "actual": 5.000,  "price": 4.200,  "days": 4,  "start_days": 0},
+    {"product_idx": 46, "target": 90,  "actual": 8.046,  "price": 6.500,  "days": 7,  "start_days": 0},
+    {"product_idx": 47, "target": 250, "actual": 1.351,  "price": 1.100,  "days": 5,  "start_days": 0},
+    {"product_idx": 48, "target": 200, "actual": 1.705,  "price": 1.350,  "days": 3,  "start_days": 0},
+    {"product_idx": 49, "target": 60,  "actual": 3.175,  "price": 2.800,  "days": 10, "start_days": 0},
+    {"product_idx": 1,  "target": 120, "actual": 3.150,  "price": 2.800,  "days": 9,  "start_days": 2,  "upcoming": True},
+    {"product_idx": 3,  "target": 60,  "actual": 5.250,  "price": 4.500,  "days": 10, "start_days": 3,  "upcoming": True},
+    {"product_idx": 6,  "target": 80,  "actual": 6.100,  "price": 5.200,  "days": 8,  "start_days": 1,  "upcoming": True},
+    {"product_idx": 25, "target": 100, "actual": 9.500,  "price": 7.900,  "days": 12, "start_days": 4,  "upcoming": True},
 ]
 
 
@@ -159,11 +163,15 @@ def run_seed():
             deal_ids.append(existing["id"])
             continue
 
-        end_time = now + timedelta(days=cfg["days"])
+        start_days_offset = cfg.get("start_days", 0)
+        start_time = now + timedelta(days=start_days_offset)
+        end_time = start_time + timedelta(days=cfg["days"])
+        status = "Upcoming" if start_days_offset > 0 else "Active"
+        actual_price = cfg.get("actual")
         cur.execute(
-            """INSERT INTO deals (product_id, seller_id, target_quantity, price_per_unit, end_time, status)
-               VALUES (%s,%s,%s,%s,%s,'Active') RETURNING id""",
-            (product_id, supplier_id, cfg["target"], cfg["price"], end_time)
+            """INSERT INTO deals (product_id, seller_id, target_quantity, actual_price, price_per_unit, start_time, end_time, status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (product_id, supplier_id, cfg["target"], actual_price, cfg["price"], start_time, end_time, status)
         )
         deal_ids.append(cur.fetchone()["id"])
 

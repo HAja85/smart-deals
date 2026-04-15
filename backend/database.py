@@ -57,13 +57,16 @@ def init_db():
             seller_id INTEGER REFERENCES users(id),
             target_quantity INTEGER NOT NULL,
             current_quantity INTEGER DEFAULT 0,
+            actual_price NUMERIC(10,3),
             price_per_unit NUMERIC(10,3) NOT NULL,
-            start_time TIMESTAMP DEFAULT NOW(),
+            start_time TIMESTAMP NOT NULL DEFAULT NOW(),
             end_time TIMESTAMP NOT NULL,
             status VARCHAR(50) DEFAULT 'Active',
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    cur.execute("ALTER TABLE deals ADD COLUMN IF NOT EXISTS actual_price NUMERIC(10,3)")
+    cur.execute("ALTER TABLE deals ADD COLUMN IF NOT EXISTS start_time TIMESTAMP NOT NULL DEFAULT NOW()")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS orders (
