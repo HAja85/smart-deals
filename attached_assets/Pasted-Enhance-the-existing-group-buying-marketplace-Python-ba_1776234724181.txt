@@ -1,0 +1,232 @@
+Enhance the existing group-buying marketplace (Python backend) with:
+
+1) Payment Gateway Integration
+2) Refund Handling
+3) Reports & Analytics
+4) Email & Mobile OTP Authentication
+5) Notifications for upcoming deals
+
+System is for Kuwait. Use KWD currency.
+
+=====================
+PAYMENT INTEGRATION
+=====================
+
+Integrate a payment gateway (Stripe preferred for sandbox, or abstract service layer).
+
+Create PaymentService with methods:
+
+- create_payment_intent(order_id, amount)
+- authorize_payment(order_id)
+- capture_payment(order_id)
+- cancel_payment(order_id)
+- refund_payment(order_id)
+
+Flow:
+
+1. When user places order:
+   - Create order with payment_status = "Pending"
+   - Call create_payment_intent
+
+2. On payment success:
+   - Mark payment_status = "Authorized"
+
+3. When deal becomes Successful:
+   - Capture all authorized payments
+
+4. When deal Failed:
+   - Cancel or refund all payments
+
+Store:
+- transaction_id
+- payment_method
+- payment_status
+- paid_at
+
+IMPORTANT:
+- Use sandbox mode
+- Handle payment failure gracefully
+- Ensure idempotency (avoid double charge)
+
+=====================
+REFUND SYSTEM
+=====================
+
+Refund scenarios:
+
+1. Deal Failed → full refund
+2. Manual admin refund (optional)
+
+Add fields:
+- refund_status (None, Initiated, Completed)
+- refund_amount
+- refund_time
+
+Create API:
+- POST /refund/{order_id}
+
+Logic:
+- Only allow refund if payment_status = Captured
+- Call payment gateway refund API
+- Update refund_status
+
+=====================
+REPORTS & ANALYTICS
+=====================
+
+Create reporting APIs:
+
+1. Sales Report
+GET /reports/sales
+- total_orders
+- total_revenue
+- successful_deals
+- failed_deals
+
+2. Deal Performance
+GET /reports/deals
+- deal_id
+- product
+- target vs achieved
+- success rate
+
+3. Top Products
+GET /reports/top-products
+- most ordered products
+
+4. Supplier Dashboard
+GET /reports/supplier
+- supplier revenue
+- active deals
+- completed deals
+
+(Optional: export as CSV)
+
+=====================
+OTP AUTHENTICATION
+=====================
+
+Add Email + Mobile OTP verification during signup/login.
+
+Fields:
+- email
+- phone_number
+- is_verified
+
+Create OTP system:
+
+OTP Model:
+- user_id
+- otp_code
+- expiry_time (5 minutes)
+- is_used
+
+APIs:
+
+1. POST /send-otp
+- send OTP to email and phone
+
+2. POST /verify-otp
+- validate OTP
+- mark user as verified
+
+Implementation:
+
+- Email: use SMTP (Gmail or SendGrid)
+- SMS: use Twilio (or mock service for MVP)
+
+Rules:
+- OTP expires in 5 minutes
+- Max 3 attempts
+- Resend allowed after 60 seconds
+
+=====================
+NOTIFICATIONS SYSTEM
+=====================
+
+Notify users about:
+
+1. New upcoming deals
+2. Deal about to expire
+3. Deal success/failure
+
+Create Notification model:
+- id
+- user_id
+- title
+- message
+- type (Deal, Order, System)
+- is_read
+- created_at
+
+APIs:
+- GET /notifications
+- POST /mark-as-read/{id}
+
+Triggers:
+
+1. New Deal Created:
+- Notify all consumers
+
+2. Deal Ending Soon (e.g., 1 hour before):
+- Background job sends alert
+
+3. Deal Successful:
+- Notify users: "Your deal is successful!"
+
+4. Deal Failed:
+- Notify users: "Deal failed, refund initiated"
+
+(Optional Enhancements):
+- Email notifications
+- SMS alerts
+
+=====================
+BACKGROUND JOB EXTENSION
+=====================
+
+Extend existing scheduler:
+
+Every minute:
+- Check deals ending soon → send notifications
+- Process deal success/failure
+- Trigger payments (capture/refund)
+
+=====================
+SECURITY & BEST PRACTICES
+=====================
+
+- Hash sensitive data
+- Do NOT store raw card details
+- Use tokenized payments
+- Validate all APIs
+- Use environment variables for secrets
+
+=====================
+UI INTEGRATION NOTES
+=====================
+
+- Add payment button on order
+- Show payment status:
+    Pending / Paid / Refunded
+
+- Add OTP screen during signup/login
+
+- Add notifications icon (bell 🔔)
+    - Show unread count
+
+- Show alerts:
+    - "Deal ending soon"
+    - "Deal successful"
+
+=====================
+OUTPUT REQUIREMENT
+=====================
+
+Generate:
+- Payment service
+- OTP service
+- Notification service
+- Updated models
+- API routes
+- Background job updates
