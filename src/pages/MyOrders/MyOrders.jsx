@@ -7,13 +7,22 @@ import { formatCountdown, useCountdown } from "../../hooks/useCountdown";
 const statusIcon = (s) => {
   if (s === "Captured") return <FaCheckCircle className="text-emerald-500" />;
   if (s === "Cancelled") return <FaTimesCircle className="text-red-500" />;
+  if (s === "Authorized") return <FaCheckCircle className="text-blue-500" />;
   return <FaHourglassHalf className="text-orange-400" />;
 };
 
 const statusColor = (s) => {
   if (s === "Captured") return "bg-emerald-100 text-emerald-700";
   if (s === "Cancelled") return "bg-red-100 text-red-600";
+  if (s === "Authorized") return "bg-blue-100 text-blue-700";
   return "bg-orange-100 text-orange-600";
+};
+
+const statusLabel = (s) => {
+  if (s === "Authorized") return "Paid (Authorized)";
+  if (s === "Captured") return "Paid (Captured)";
+  if (s === "Pending") return "Awaiting Payment";
+  return s;
 };
 
 const dealStatusColor = (s) => {
@@ -41,7 +50,7 @@ const OrderCard = ({ order }) => {
               Deal: {order.deal_status}
             </span>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${statusColor(order.payment_status)}`}>
-              {statusIcon(order.payment_status)} {order.payment_status}
+              {statusIcon(order.payment_status)} {statusLabel(order.payment_status)}
             </span>
           </div>
         </div>

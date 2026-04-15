@@ -1,8 +1,10 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, get_connection
 from backend.routers import auth_router, products, deals, orders, search
+from backend.services import payment_service
 from datetime import datetime, timezone
 
 app = FastAPI(title="SmartDeals Kuwait API")
@@ -42,10 +44,32 @@ def check_deal_statuses():
             if now >= end_time:
                 if deal["current_quantity"] >= deal["target_quantity"]:
                     cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (deal["id"],))
-                    cur.execute("UPDATE orders SET payment_status = 'Captured' WHERE deal_id = %s", (deal["id"],))
+                    cur.execute(
+                        "SELECT id, stripe_payment_intent_id FROM orders WHERE deal_id = %s AND payment_status = 'Authorized'",
+                        (deal["id"],)
+                    )
+                    for order in cur.fetchall():
+                        order = dict(order)
+                        if order.get("stripe_payment_intent_id"):
+                            payment_service.capture_payment(order["stripe_payment_intent_id"])
+                    cur.execute(
+                        "UPDATE orders SET payment_status = 'Captured', paid_at = NOW() WHERE deal_id = %s AND payment_status = 'Authorized'",
+                        (deal["id"],)
+                    )
                 else:
                     cur.execute("UPDATE deals SET status = 'Failed' WHERE id = %s", (deal["id"],))
-                    cur.execute("UPDATE orders SET payment_status = 'Cancelled' WHERE deal_id = %s", (deal["id"],))
+                    cur.execute(
+                        "SELECT id, stripe_payment_intent_id FROM orders WHERE deal_id = %s AND payment_status IN ('Pending', 'Authorized')",
+                        (deal["id"],)
+                    )
+                    for order in cur.fetchall():
+                        order = dict(order)
+                        if order.get("stripe_payment_intent_id"):
+                            payment_service.cancel_payment(order["stripe_payment_intent_id"])
+                    cur.execute(
+                        "UPDATE orders SET payment_status = 'Cancelled' WHERE deal_id = %s AND payment_status IN ('Pending', 'Authorized')",
+                        (deal["id"],)
+                    )
 
         conn.commit()
         cur.close()
@@ -140,6 +164,11 @@ def upcoming_deals():
     finally:
         cur.close()
         conn.close()
+
+
+@app.get("/api/config")
+def get_config():
+    return {"stripe_publishable_key": os.environ.get("STRIPE_PUBLISHABLE_KEY", "")}
 
 
 @app.get("/api/health")

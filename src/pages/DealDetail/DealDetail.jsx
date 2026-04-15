@@ -75,9 +75,7 @@ const DealDetail = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to join deal");
-      toast.success(`Joined! Total: ${parseFloat(data.total_amount).toFixed(3)} KWD`);
-      const updated = await fetch(`/api/deals/${id}`).then(r => r.json());
-      setDeal(updated);
+      navigate("/payment", { state: { order: data, deal, qty } });
     } catch (err) {
       toast.error(err.message);
     } finally {

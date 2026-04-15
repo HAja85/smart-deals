@@ -76,9 +76,21 @@ def init_db():
             quantity INTEGER NOT NULL,
             total_amount NUMERIC(10,3),
             payment_status VARCHAR(50) DEFAULT 'Pending',
+            stripe_payment_intent_id VARCHAR(255),
+            stripe_client_secret VARCHAR(500),
+            paid_at TIMESTAMP,
+            refund_status VARCHAR(50) DEFAULT 'None',
+            refund_amount NUMERIC(10,3),
+            refund_time TIMESTAMP,
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS stripe_payment_intent_id VARCHAR(255)")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS stripe_client_secret VARCHAR(500)")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50) DEFAULT 'None'")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,3)")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_time TIMESTAMP")
 
     conn.commit()
     cur.close()
