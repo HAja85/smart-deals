@@ -3,6 +3,7 @@ import uuid
 import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, get_connection
@@ -262,3 +263,16 @@ def get_config():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+DIST_DIR = "dist"
+
+@app.get("/{full_path:path}")
+async def serve_react(full_path: str):
+    file_path = os.path.join(DIST_DIR, full_path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    index = os.path.join(DIST_DIR, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    return {"detail": "Frontend not built. Run: npm run build"}
