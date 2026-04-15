@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, get_connection
-from backend.routers import auth_router, products, deals, orders, search, notifications
+from backend.routers import auth_router, products, deals, orders, search, notifications, admin
 from backend.routers.notifications import create_notification
 from backend.services import payment_service
 from datetime import datetime, timezone, timedelta
@@ -162,6 +162,7 @@ app.include_router(deals.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 def _format_deal_row(r, cur):

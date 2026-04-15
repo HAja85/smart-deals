@@ -1,17 +1,17 @@
-import React, { useState, useContext } from "react";
+import React, { useContext } from "react";
 import {
   FaUser, FaEnvelope, FaLock, FaEye, FaEyeSlash, FaUserPlus, FaImage,
-  FaStore, FaShoppingCart,
+  FaShoppingCart, FaInfoCircle,
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router";
 import Swal from "sweetalert2";
+import { useState } from "react";
 
 const SignUp = () => {
   const { createUser, emailInput, setEmailInput } = useContext(AuthContext);
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("consumer");
   const navigate = useNavigate();
 
   const handleRegister = (e) => {
@@ -28,7 +28,7 @@ const SignUp = () => {
     }
 
     Swal.close();
-    createUser(email, password, displayName, photoURL, role)
+    createUser(email, password, displayName, photoURL, "consumer")
       .then(() => {
         toast.success("Sign Up successful!");
         e.target.reset();
@@ -42,31 +42,14 @@ const SignUp = () => {
   return (
     <div className="flex justify-center items-center min-h-screen bg-gradient-to-r from-sky-100 via-white to-[#E0F8F5]">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-[#58A0C8]">
-        <h2 className="text-3xl font-bold text-center text-[#34699A] mb-6">Create Account</h2>
+        <h2 className="text-3xl font-bold text-center text-[#34699A] mb-2">Create Account</h2>
 
-        <div className="flex gap-3 mb-6">
-          <button
-            type="button"
-            onClick={() => setRole("consumer")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium border-2 transition ${
-              role === "consumer"
-                ? "bg-[#34699A] text-white border-[#34699A]"
-                : "border-gray-300 text-gray-600 hover:border-[#58A0C8]"
-            }`}
-          >
-            <FaShoppingCart /> Consumer
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole("supplier")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium border-2 transition ${
-              role === "supplier"
-                ? "bg-emerald-600 text-white border-emerald-600"
-                : "border-gray-300 text-gray-600 hover:border-emerald-400"
-            }`}
-          >
-            <FaStore /> Supplier
-          </button>
+        <div className="flex items-center gap-2 mb-6 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <FaShoppingCart className="text-[#34699A] shrink-0" />
+          <p className="text-sm text-gray-600">
+            Registering as a <strong className="text-[#34699A]">Consumer</strong>.
+            Supplier accounts are created by our admin team.
+          </p>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
@@ -114,8 +97,13 @@ const SignUp = () => {
             type="submit"
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#34699A] to-[#58A0C8] text-white py-2.5 rounded-lg font-medium hover:opacity-95 transition cursor-pointer"
           >
-            <FaUserPlus /> Sign Up as {role === "supplier" ? "Supplier" : "Consumer"}
+            <FaUserPlus /> Sign Up as Consumer
           </button>
+
+          <div className="flex items-start gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+            <FaInfoCircle className="shrink-0 mt-0.5 text-gray-300" />
+            <span>Want to sell on SmartDeals? Contact our team to get a Supplier account set up.</span>
+          </div>
 
           <p className="text-center text-sm text-gray-600">
             Already have an account?{" "}

@@ -14,8 +14,18 @@ import SignUp from "../auth/SignUp/SignUp";
 import PrivetRoutes from "./PrivetRoutes";
 import Payment from "../pages/Payment/Payment";
 import SupplierOrders from "../pages/SupplierOrders/SupplierOrders";
+import AdminLogin from "../pages/Admin/AdminLogin";
+import AdminDashboard from "../pages/Admin/AdminDashboard";
 
 export const router = createBrowserRouter([
+  {
+    path: "/admin",
+    Component: AdminLogin,
+  },
+  {
+    path: "/admin/dashboard",
+    Component: AdminDashboard,
+  },
   {
     path: "/",
     Component: MainLayout,

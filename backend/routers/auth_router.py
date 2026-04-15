@@ -49,7 +49,7 @@ def register(req: RegisterRequest):
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
-    role = req.role if req.role in ("supplier", "consumer") else "consumer"
+    role = "consumer"
 
     conn = get_connection()
     cur = conn.cursor()
