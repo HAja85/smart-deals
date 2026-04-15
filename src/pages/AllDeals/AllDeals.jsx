@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useSearchParams } from "react-router";
 import { FaClock, FaUsers, FaSearch, FaTags, FaFilter, FaCalendarAlt } from "react-icons/fa";
 import { useCountdown, formatCountdown } from "../../hooks/useCountdown";
+
+const LIMIT = 24;
 
 const CountdownDisplay = ({ endTime, status }) => {
   const t = useCountdown(endTime);
@@ -90,23 +92,79 @@ const DealCard = ({ deal }) => {
   );
 };
 
+const SkeletonCard = () => (
+  <div className="bg-white rounded-2xl shadow animate-pulse overflow-hidden">
+    <div className="h-48 bg-gray-200" />
+    <div className="p-4 space-y-3">
+      <div className="h-4 bg-gray-200 rounded w-3/4" />
+      <div className="h-3 bg-gray-200 rounded w-1/2" />
+      <div className="h-8 bg-gray-200 rounded" />
+    </div>
+  </div>
+);
+
 const AllDeals = () => {
   const [deals, setDeals] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState("Active");
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("search") || "");
   const [searchInput, setSearchInput] = useState(query);
+  const offsetRef = useRef(0);
+  const sentinelRef = useRef(null);
+  const observerRef = useRef(null);
 
-  const fetchDeals = (q, f) => {
-    setLoading(true);
-    const url = q
-      ? `/api/search?q=${encodeURIComponent(q)}`
-      : f === "All" ? "/api/deals" : `/api/deals?status=${f}`;
-    fetch(url).then(r => r.json()).then(setDeals).catch(() => setDeals([])).finally(() => setLoading(false));
-  };
+  const buildUrl = useCallback((q, f, offset) => {
+    const params = new URLSearchParams({ limit: LIMIT, offset });
+    if (q) {
+      params.set("q", q);
+      return `/api/search?${params}`;
+    }
+    if (f !== "All") params.set("status", f);
+    return `/api/deals?${params}`;
+  }, []);
 
-  useEffect(() => { fetchDeals(query, filter); }, [query, filter]);
+  const loadPage = useCallback(async (q, f, offset, reset) => {
+    if (reset) setLoading(true);
+    else setLoadingMore(true);
+    try {
+      const res = await fetch(buildUrl(q, f, offset));
+      const data = await res.json();
+      const items = data.items || [];
+      setDeals(prev => reset ? items : [...prev, ...items]);
+      setTotal(data.total || 0);
+      setHasMore(data.has_more || false);
+      offsetRef.current = offset + items.length;
+    } catch {
+      if (reset) setDeals([]);
+    } finally {
+      if (reset) setLoading(false);
+      else setLoadingMore(false);
+    }
+  }, [buildUrl]);
+
+  useEffect(() => {
+    offsetRef.current = 0;
+    loadPage(query, filter, 0, true);
+  }, [query, filter, loadPage]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!sentinelRef.current) return;
+    observerRef.current = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
+          loadPage(query, filter, offsetRef.current, false);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observerRef.current.observe(sentinelRef.current);
+    return () => observerRef.current?.disconnect();
+  }, [hasMore, loadingMore, loading, query, filter, loadPage]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -143,17 +201,14 @@ const AllDeals = () => {
               {s}
             </button>
           ))}
-          <span className="ml-auto text-sm text-gray-400">{deals.length} deals found</span>
+          <span className="ml-auto text-sm text-gray-400">
+            {loading ? "Loading…" : `${deals.length} of ${total} deals`}
+          </span>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl shadow animate-pulse overflow-hidden">
-                <div className="h-48 bg-gray-200" />
-                <div className="p-4 space-y-3"><div className="h-4 bg-gray-200 rounded w-3/4" /><div className="h-3 bg-gray-200 rounded w-1/2" /><div className="h-8 bg-gray-200 rounded" /></div>
-              </div>
-            ))}
+            {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : deals.length === 0 ? (
           <div className="text-center py-20">
@@ -162,9 +217,23 @@ const AllDeals = () => {
             {query && <button onClick={() => { setQuery(""); setSearchInput(""); setFilter("Active"); }} className="mt-4 text-[#34699A] underline text-sm">Clear search</button>}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {deals.map(d => <DealCard key={d.id} deal={d} />)}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {deals.map(d => <DealCard key={d.id} deal={d} />)}
+            </div>
+
+            <div ref={sentinelRef} className="h-10 mt-4 flex items-center justify-center">
+              {loadingMore && (
+                <div className="flex items-center gap-2 text-gray-400 text-sm">
+                  <div className="w-4 h-4 border-2 border-[#34699A] border-t-transparent rounded-full animate-spin" />
+                  Loading more deals…
+                </div>
+              )}
+              {!hasMore && deals.length > 0 && (
+                <p className="text-gray-400 text-sm">All {total} deals loaded</p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

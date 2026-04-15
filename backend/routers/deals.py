@@ -93,16 +93,33 @@ def parse_dt(s: str) -> datetime:
 
 
 @router.get("")
-def get_deals(status: Optional[str] = Query(None)):
+def get_deals(
+    status: Optional[str] = Query(None),
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     conn = get_connection()
     cur = conn.cursor()
     try:
         if status:
-            cur.execute("SELECT * FROM deals WHERE status = %s ORDER BY start_time DESC, id DESC", (status,))
+            cur.execute("SELECT COUNT(*) AS total FROM deals WHERE status = %s", (status,))
         else:
-            cur.execute("SELECT * FROM deals ORDER BY start_time DESC, id DESC")
+            cur.execute("SELECT COUNT(*) AS total FROM deals")
+        total = cur.fetchone()["total"]
+
+        if status:
+            cur.execute(
+                "SELECT * FROM deals WHERE status = %s ORDER BY start_time DESC, id DESC LIMIT %s OFFSET %s",
+                (status, limit, offset),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM deals ORDER BY start_time DESC, id DESC LIMIT %s OFFSET %s",
+                (limit, offset),
+            )
         rows = cur.fetchall()
-        return [get_deal_with_product(cur, dict(r)) for r in rows]
+        items = [get_deal_with_product(cur, dict(r)) for r in rows]
+        return {"items": items, "total": total, "has_more": offset + len(items) < total}
     finally:
         cur.close()
         conn.close()

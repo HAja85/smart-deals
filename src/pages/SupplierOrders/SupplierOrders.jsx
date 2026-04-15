@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useCallback } from "react";
+import React, { useEffect, useState, useContext, useCallback, useRef } from "react";
 import { Link } from "react-router";
 import {
   FaClipboardList, FaSearch, FaFilter, FaCheckCircle,
@@ -8,6 +8,8 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import Swal from "sweetalert2";
 import { toast } from "react-toastify";
+
+const LIMIT = 50;
 
 const paymentColor = (s) => {
   if (s === "Captured") return "bg-emerald-100 text-emerald-700";
@@ -21,13 +23,6 @@ const paymentIcon = (s) => {
   if (s === "Authorized") return <FaCheckCircle className="text-blue-500" />;
   if (s === "Cancelled") return <FaTimesCircle className="text-red-500" />;
   return <FaHourglassHalf className="text-orange-400" />;
-};
-
-const paymentLabel = (s) => {
-  if (s === "Authorized") return "Authorized";
-  if (s === "Captured") return "Captured";
-  if (s === "Pending") return "Pending";
-  return s;
 };
 
 const dealStatusColor = (s) => {
@@ -89,7 +84,7 @@ const OrderRow = ({ order, onCancel, onDeliver }) => {
         </td>
         <td className="px-4 py-3 text-center">
           <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${paymentColor(order.payment_status)}`}>
-            {paymentIcon(order.payment_status)} {paymentLabel(order.payment_status)}
+            {paymentIcon(order.payment_status)} {order.payment_status}
           </span>
         </td>
         <td className="px-4 py-3 text-center">
@@ -109,28 +104,19 @@ const OrderRow = ({ order, onCancel, onDeliver }) => {
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setExpanded(e => !e)}
-              title="View customer info"
-              className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition text-xs cursor-pointer"
-            >
+            <button onClick={() => setExpanded(e => !e)} title="View customer info"
+              className="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition text-xs cursor-pointer">
               {expanded ? <FaChevronUp /> : <FaChevronDown />}
             </button>
             {canDeliver && (
-              <button
-                onClick={() => onDeliver(order)}
-                title="Mark as Delivered"
-                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition text-xs cursor-pointer"
-              >
+              <button onClick={() => onDeliver(order)} title="Mark as Delivered"
+                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition text-xs cursor-pointer">
                 <FaTruck />
               </button>
             )}
             {canCancel && (
-              <button
-                onClick={() => onCancel(order)}
-                title="Cancel Order"
-                className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-xs cursor-pointer"
-              >
+              <button onClick={() => onCancel(order)} title="Cancel Order"
+                className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-xs cursor-pointer">
                 <FaBan />
               </button>
             )}
@@ -176,47 +162,72 @@ const OrderRow = ({ order, onCancel, onDeliver }) => {
 const SupplierOrders = () => {
   const { user } = useContext(AuthContext);
   const [orders, setOrders] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [filterPayment, setFilterPayment] = useState("All");
   const [filterDeal, setFilterDeal] = useState("All");
   const [filterDelivery, setFilterDelivery] = useState("All");
+  const offsetRef = useRef(0);
+  const sentinelRef = useRef(null);
+  const observerRef = useRef(null);
 
-  const fetchOrders = useCallback(() => {
+  const buildUrl = useCallback((offset) => {
+    const params = new URLSearchParams({ limit: LIMIT, offset });
+    if (filterPayment !== "All") params.set("payment_status", filterPayment);
+    if (filterDeal !== "All") params.set("deal_status", filterDeal);
+    if (filterDelivery !== "All") params.set("delivery_status", filterDelivery);
+    if (search.trim()) params.set("search", search.trim());
+    return `/api/orders/supplier-orders?${params}`;
+  }, [filterPayment, filterDeal, filterDelivery, search]);
+
+  const loadPage = useCallback(async (offset, reset) => {
     if (!user) return;
-    user.getIdToken().then(token =>
-      fetch("/api/orders/supplier-orders", {
-        headers: { authorization: `Bearer ${token}` },
-      })
-        .then(r => r.json())
-        .then(data => {
-          setOrders(Array.isArray(data) ? data : []);
-        })
-        .catch(() => setOrders([]))
-        .finally(() => setLoading(false))
-    );
-  }, [user]);
-
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+    if (reset) setLoading(true);
+    else setLoadingMore(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(buildUrl(offset), { headers: { authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      const items = data.items || [];
+      setOrders(prev => reset ? items : [...prev, ...items]);
+      setTotal(data.total ?? 0);
+      setHasMore(data.has_more || false);
+      if (data.stats) setStats(data.stats);
+      offsetRef.current = offset + items.length;
+    } catch {
+      if (reset) setOrders([]);
+    } finally {
+      if (reset) setLoading(false);
+      else setLoadingMore(false);
+    }
+  }, [user, buildUrl]);
 
   useEffect(() => {
-    let result = [...orders];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(o =>
-        o.product_title?.toLowerCase().includes(q) ||
-        o.buyer_name?.toLowerCase().includes(q) ||
-        o.buyer_email?.toLowerCase().includes(q) ||
-        o.order_number?.toLowerCase().includes(q) ||
-        o.mobile_number?.toLowerCase().includes(q)
-      );
-    }
-    if (filterPayment !== "All") result = result.filter(o => o.payment_status === filterPayment);
-    if (filterDeal !== "All") result = result.filter(o => o.deal_status === filterDeal);
-    if (filterDelivery !== "All") result = result.filter(o => (o.delivery_status || "Pending") === filterDelivery);
-    setFiltered(result);
-  }, [search, filterPayment, filterDeal, filterDelivery, orders]);
+    offsetRef.current = 0;
+    loadPage(0, true);
+  }, [loadPage]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!sentinelRef.current) return;
+    observerRef.current = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
+          loadPage(offsetRef.current, false);
+        }
+      },
+      { rootMargin: "300px" }
+    );
+    observerRef.current.observe(sentinelRef.current);
+    return () => observerRef.current?.disconnect();
+  }, [hasMore, loadingMore, loading, loadPage]);
+
+  const applySearch = () => setSearch(searchInput);
 
   const handleCancel = async (order) => {
     const res = await Swal.fire({
@@ -240,17 +251,16 @@ const SupplierOrders = () => {
       allowOutsideClick: false,
     });
     if (!res.isConfirmed) return;
-
     try {
       const token = await user.getIdToken();
       const r = await fetch(`/api/orders/${order.id}/supplier-cancel`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
+        method: "POST", headers: { authorization: `Bearer ${token}` },
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail);
       toast.success("Order cancelled successfully");
-      fetchOrders();
+      offsetRef.current = 0;
+      loadPage(0, true);
     } catch (err) {
       toast.error(err.message || "Failed to cancel order");
     }
@@ -268,33 +278,28 @@ const SupplierOrders = () => {
       allowOutsideClick: false,
     });
     if (!res.isConfirmed) return;
-
     try {
       const token = await user.getIdToken();
       const r = await fetch(`/api/orders/${order.id}/mark-delivered`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}` },
+        method: "POST", headers: { authorization: `Bearer ${token}` },
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail);
       toast.success("Order marked as delivered");
-      fetchOrders();
+      offsetRef.current = 0;
+      loadPage(0, true);
     } catch (err) {
       toast.error(err.message || "Failed to update delivery status");
     }
   };
 
-  const totalRevenue = orders
-    .filter(o => o.payment_status === "Captured")
-    .reduce((s, o) => s + parseFloat(o.total_amount || 0), 0);
-
-  const stats = [
-    { label: "Total Orders", value: orders.length, color: "text-[#34699A]" },
-    { label: "Authorized", value: orders.filter(o => o.payment_status === "Authorized").length, color: "text-blue-600" },
-    { label: "Captured", value: orders.filter(o => o.payment_status === "Captured").length, color: "text-emerald-600" },
-    { label: "Delivered", value: orders.filter(o => o.delivery_status === "Delivered").length, color: "text-teal-600" },
-    { label: "Revenue (KWD)", value: totalRevenue.toFixed(3), color: "text-emerald-700" },
-  ];
+  const statCards = stats ? [
+    { label: "Total Orders", value: stats.total_all?.toLocaleString() ?? "—", color: "text-[#34699A]" },
+    { label: "Authorized", value: stats.authorized?.toLocaleString() ?? "—", color: "text-blue-600" },
+    { label: "Captured", value: stats.captured?.toLocaleString() ?? "—", color: "text-emerald-600" },
+    { label: "Delivered", value: stats.delivered?.toLocaleString() ?? "—", color: "text-teal-600" },
+    { label: "Revenue (KWD)", value: parseFloat(stats.revenue || 0).toFixed(3), color: "text-emerald-700" },
+  ] : [];
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -308,14 +313,16 @@ const SupplierOrders = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {stats.map(s => (
-            <div key={s.label} className="bg-white rounded-2xl shadow-sm p-4 text-center border border-gray-100">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-500 mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
+        {stats && (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            {statCards.map(s => (
+              <div key={s.label} className="bg-white rounded-2xl shadow-sm p-4 text-center border border-gray-100">
+                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-5 flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2">
@@ -323,11 +330,20 @@ const SupplierOrders = () => {
             <input
               type="text"
               placeholder="Search by order #, product, name, email, mobile..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && applySearch()}
               className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
             />
+            {searchInput && (
+              <button onClick={() => { setSearchInput(""); setSearch(""); }}
+                className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            )}
           </div>
+          <button onClick={applySearch}
+            className="px-4 py-2 bg-[#34699A] text-white text-sm rounded-xl hover:bg-[#2a5580] transition">
+            Search
+          </button>
           <div className="flex flex-wrap items-center gap-2">
             <FaFilter className="text-gray-400" />
             <select value={filterPayment} onChange={e => setFilterPayment(e.target.value)}
@@ -353,7 +369,9 @@ const SupplierOrders = () => {
               <option value="Stopped">Stopped</option>
             </select>
           </div>
-          <span className="text-xs text-gray-400 ml-auto">{filtered.length} orders</span>
+          <span className="text-xs text-gray-400 ml-auto">
+            {loading ? "Loading…" : `${orders.length} of ${total} orders`}
+          </span>
         </div>
 
         {loading ? (
@@ -365,43 +383,52 @@ const SupplierOrders = () => {
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
             <FaBoxOpen className="text-6xl text-gray-200 mx-auto mb-4" />
             <p className="text-gray-500 font-medium">No orders found</p>
             <p className="text-gray-400 text-sm mt-1">Orders placed on your deals will appear here.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Order #</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Buyer</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Product</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-600">Qty</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Total</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-600">Payment</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-600">Delivery</th>
-                    <th className="text-center px-4 py-3 font-semibold text-gray-600">Deal</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Date</th>
-                    <th className="px-4 py-3 font-semibold text-gray-600">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(order => (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      onCancel={handleCancel}
-                      onDeliver={handleDeliver}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          <>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Order #</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Buyer</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Product</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600">Qty</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Total</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600">Payment</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600">Delivery</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600">Deal</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Date</th>
+                      <th className="px-4 py-3 font-semibold text-gray-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map(order => (
+                      <OrderRow key={order.id} order={order} onCancel={handleCancel} onDeliver={handleDeliver} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            <div ref={sentinelRef} className="h-12 mt-4 flex items-center justify-center">
+              {loadingMore && (
+                <div className="flex items-center gap-2 text-gray-400 text-sm">
+                  <div className="w-4 h-4 border-2 border-[#34699A] border-t-transparent rounded-full animate-spin" />
+                  Loading more orders…
+                </div>
+              )}
+              {!hasMore && orders.length > 0 && (
+                <p className="text-gray-400 text-sm">All {total.toLocaleString()} orders loaded</p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
@@ -207,11 +207,46 @@ def supplier_only(credentials: HTTPAuthorizationCredentials = Depends(security))
 
 
 @router.get("/supplier-orders")
-def get_supplier_orders(user=Depends(supplier_only)):
+def get_supplier_orders(
+    user=Depends(supplier_only),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    payment_status: Optional[str] = Query(None),
+    deal_status: Optional[str] = Query(None),
+    delivery_status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        seller_id = int(user["sub"])
+
+        conditions = ["d.seller_id = %s"]
+        params: list = [seller_id]
+
+        if payment_status and payment_status != "All":
+            conditions.append("o.payment_status = %s")
+            params.append(payment_status)
+        if deal_status and deal_status != "All":
+            conditions.append("d.status = %s")
+            params.append(deal_status)
+        if delivery_status and delivery_status != "All":
+            conditions.append("COALESCE(o.delivery_status, 'Pending') = %s")
+            params.append(delivery_status)
+        if search and search.strip():
+            q = f"%{search.strip().lower()}%"
+            conditions.append(
+                "(LOWER(p.title) LIKE %s OR LOWER(u.name) LIKE %s OR LOWER(u.email) LIKE %s"
+                " OR LOWER(o.order_number) LIKE %s OR LOWER(o.mobile_number) LIKE %s)"
+            )
+            params.extend([q, q, q, q, q])
+
+        where = " AND ".join(conditions)
+
+        cur.execute(f"SELECT COUNT(*) AS total FROM orders o JOIN deals d ON o.deal_id = d.id JOIN products p ON d.product_id = p.id JOIN users u ON o.user_id = u.id WHERE {where}", params)
+        total = cur.fetchone()["total"]
+
+        cur.execute(f"""
             SELECT o.id, o.order_number, o.quantity, o.total_amount, o.payment_status,
                    o.created_at, o.paid_at, o.refund_status, o.deal_id,
                    o.delivery_address, o.mobile_number, o.delivery_status,
@@ -224,11 +259,12 @@ def get_supplier_orders(user=Depends(supplier_only)):
             JOIN deals d ON o.deal_id = d.id
             JOIN products p ON d.product_id = p.id
             JOIN users u ON o.user_id = u.id
-            WHERE d.seller_id = %s
+            WHERE {where}
             ORDER BY o.created_at DESC
-        """, (int(user["sub"]),))
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
         rows = cur.fetchall()
-        result = []
+        items = []
         for r in rows:
             d = dict(r)
             d["_id"] = d["id"]
@@ -238,8 +274,33 @@ def get_supplier_orders(user=Depends(supplier_only)):
             for ts in ["created_at", "end_time", "paid_at", "refund_time"]:
                 if d.get(ts):
                     d[ts] = d[ts].isoformat()
-            result.append(d)
-        return result
+            items.append(d)
+
+        stats = None
+        if offset == 0:
+            cur.execute(f"""
+                SELECT
+                    COUNT(*) FILTER (WHERE o.payment_status = 'Authorized') AS authorized,
+                    COUNT(*) FILTER (WHERE o.payment_status = 'Captured') AS captured,
+                    COUNT(*) FILTER (WHERE COALESCE(o.delivery_status,'Pending') = 'Delivered') AS delivered,
+                    COALESCE(SUM(o.total_amount) FILTER (WHERE o.payment_status = 'Captured'), 0) AS revenue
+                FROM orders o
+                JOIN deals d ON o.deal_id = d.id
+                JOIN products p ON d.product_id = p.id
+                JOIN users u ON o.user_id = u.id
+                WHERE d.seller_id = %s
+            """, (seller_id,))
+            row = cur.fetchone()
+            stats = {
+                "authorized": row["authorized"],
+                "captured": row["captured"],
+                "delivered": row["delivered"],
+                "revenue": float(row["revenue"]),
+            }
+            cur.execute("SELECT COUNT(*) AS total_all FROM orders o JOIN deals d ON o.deal_id = d.id WHERE d.seller_id = %s", (seller_id,))
+            stats["total_all"] = cur.fetchone()["total_all"]
+
+        return {"items": items, "total": total, "has_more": offset + len(items) < total, "stats": stats}
     finally:
         cur.close()
         conn.close()
