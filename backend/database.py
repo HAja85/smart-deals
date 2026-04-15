@@ -1,4 +1,5 @@
 import os
+import bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -26,6 +27,8 @@ def init_db():
         )
     """)
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'consumer'")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(30)")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS products (
@@ -108,6 +111,72 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS otp_verifications (
+            id SERIAL PRIMARY KEY,
+            mobile_number VARCHAR(30) NOT NULL,
+            otp_code VARCHAR(10) NOT NULL,
+            is_used BOOLEAN DEFAULT FALSE,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS email_otps (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            otp_code VARCHAR(10) NOT NULL,
+            is_used BOOLEAN DEFAULT FALSE,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def seed_db():
+    """Create default admin, supplier, and consumer accounts if they don't exist."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    seed_users = [
+        {
+            "name": "Admin",
+            "email": "admin@smartdeals.kw",
+            "password": "Admin@123",
+            "role": "admin",
+            "mobile": "+96500000001",
+        },
+        {
+            "name": "Demo Supplier",
+            "email": "supplier@smartdeals.kw",
+            "password": "Supplier123",
+            "role": "supplier",
+            "mobile": "+96500000002",
+        },
+        {
+            "name": "Demo Consumer",
+            "email": "consumer@smartdeals.kw",
+            "password": "Consumer123",
+            "role": "consumer",
+            "mobile": "+96500000003",
+        },
+    ]
+
+    for u in seed_users:
+        cur.execute("SELECT id FROM users WHERE email = %s", (u["email"],))
+        if not cur.fetchone():
+            hashed = bcrypt.hashpw(u["password"].encode(), bcrypt.gensalt()).decode()
+            cur.execute(
+                """INSERT INTO users (name, email, password_hash, role, mobile_number, is_verified)
+                   VALUES (%s, %s, %s, %s, %s, TRUE)""",
+                (u["name"], u["email"], hashed, u["role"], u["mobile"]),
+            )
 
     conn.commit()
     cur.close()
