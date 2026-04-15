@@ -62,9 +62,12 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         raise HTTPException(status_code=400, detail="Mobile number is required")
 
     conn = get_connection()
+    conn.autocommit = False  # explicit transaction for concurrency safety
     cur = conn.cursor()
     try:
-        cur.execute("SELECT * FROM deals WHERE id = %s", (data.deal_id,))
+        # SELECT FOR UPDATE: row-level lock prevents concurrent quantity drift.
+        # Any parallel request for the same deal will wait here until we commit.
+        cur.execute("SELECT * FROM deals WHERE id = %s FOR UPDATE", (data.deal_id,))
         deal = cur.fetchone()
         if not deal:
             raise HTTPException(status_code=404, detail="Deal not found")
@@ -77,7 +80,6 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         end_time = deal["end_time"]
         if end_time.tzinfo is None:
             end_time = end_time.replace(tzinfo=timezone.utc)
-
         if now >= end_time:
             raise HTTPException(status_code=400, detail="This deal has expired")
 
@@ -97,6 +99,26 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         cur.execute("UPDATE orders SET order_number = %s WHERE id = %s", (order_number, order_id))
         order["order_number"] = order_number
 
+        # Atomic increment — no read-modify-write gap; returns the true new value
+        cur.execute(
+            """UPDATE deals
+               SET current_quantity = current_quantity + %s
+               WHERE id = %s
+               RETURNING current_quantity, target_quantity, status""",
+            (data.quantity, data.deal_id),
+        )
+        updated_deal = dict(cur.fetchone())
+        new_qty = updated_deal["current_quantity"]
+        target = updated_deal["target_quantity"]
+
+        # Mark Successful only once: when status is still Active and target just hit
+        if updated_deal["status"] == "Active" and new_qty >= target:
+            cur.execute(
+                "UPDATE deals SET status = 'Successful' WHERE id = %s AND status = 'Active'",
+                (data.deal_id,),
+            )
+
+        # Create Stripe PaymentIntent AFTER the DB row is safely locked & inserted
         payment = create_payment_intent(order_id, total_amount)
         client_secret = payment.get("client_secret")
         intent_id = payment.get("payment_intent_id")
@@ -108,35 +130,27 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         order["stripe_payment_intent_id"] = intent_id
         order["stripe_client_secret"] = client_secret
 
-        new_qty = deal["current_quantity"] + data.quantity
-        cur.execute("UPDATE deals SET current_quantity = %s WHERE id = %s", (new_qty, data.deal_id))
-
-        if new_qty >= deal["target_quantity"]:
-            cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (data.deal_id,))
-
-        cur.execute(
-            "SELECT title FROM products WHERE id = %s", (deal["product_id"],)
-        )
+        cur.execute("SELECT title FROM products WHERE id = %s", (deal["product_id"],))
         product_row = cur.fetchone()
         product_title = product_row["title"] if product_row else "a product"
 
-        progress_pct = round((new_qty / deal["target_quantity"]) * 100, 1) if deal["target_quantity"] > 0 else 0
+        progress_pct = round((new_qty / target) * 100, 1) if target > 0 else 0
         create_notification(
             conn,
             user_id=deal["seller_id"],
             title="New Order Placed",
             message=f"A new order of {data.quantity} unit(s) was placed on your deal for \"{product_title}\". "
-                    f"Progress: {new_qty}/{deal['target_quantity']} ({progress_pct}%).",
+                    f"Progress: {new_qty}/{target} ({progress_pct}%).",
             notif_type="Order",
             deal_id=data.deal_id,
         )
 
-        if new_qty >= deal["target_quantity"]:
+        if new_qty >= target and updated_deal["status"] == "Active":
             create_notification(
                 conn,
                 user_id=deal["seller_id"],
                 title="🎉 Deal Target Reached!",
-                message=f"Your deal for \"{product_title}\" has reached its target of {deal['target_quantity']} units. "
+                message=f"Your deal for \"{product_title}\" has reached its target of {target} units. "
                         f"Payments will be captured automatically.",
                 notif_type="Deal",
                 deal_id=data.deal_id,
@@ -144,7 +158,14 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
 
         conn.commit()
         return format_order(order)
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Order creation failed: {str(e)}")
     finally:
+        conn.autocommit = True
         cur.close()
         conn.close()
 
