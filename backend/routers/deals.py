@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from backend.database import get_connection
 from backend.auth import decode_token
+from backend.services.payment_service import cancel_payment
 
 router = APIRouter(prefix="/deals", tags=["deals"])
 security = HTTPBearer(auto_error=False)
@@ -289,6 +290,74 @@ def stop_deal(deal_id: int, user=Depends(supplier_only)):
         cur.execute("UPDATE orders SET payment_status = 'Cancelled' WHERE deal_id = %s AND payment_status = 'Pending'", (deal_id,))
         conn.commit()
         return {"message": "Deal stopped successfully"}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/{deal_id}/cancel-refund")
+def cancel_deal_refund_all(deal_id: int, user=Depends(supplier_only)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT * FROM deals WHERE id = %s AND seller_id = %s", (deal_id, int(user["sub"])))
+        deal = cur.fetchone()
+        if not deal:
+            raise HTTPException(status_code=404, detail="Deal not found or access denied")
+        deal = dict(deal)
+        if deal["status"] in ("Successful", "Failed", "Stopped"):
+            raise HTTPException(status_code=400, detail="Deal is already completed or stopped")
+
+        cur.execute(
+            "SELECT id, stripe_payment_intent_id, user_id FROM orders WHERE deal_id = %s AND payment_status = 'Authorized'",
+            (deal_id,)
+        )
+        authorized_orders = cur.fetchall()
+
+        refunded = 0
+        failed = 0
+        for order in authorized_orders:
+            pi_id = order["stripe_payment_intent_id"]
+            if pi_id and cancel_payment(pi_id):
+                cur.execute(
+                    "UPDATE orders SET payment_status = 'Cancelled' WHERE id = %s",
+                    (order["id"],)
+                )
+                refunded += 1
+                try:
+                    product_title = deal.get("product_id", "")
+                    cur.execute("SELECT title FROM products WHERE id = %s", (deal["product_id"],))
+                    prod = cur.fetchone()
+                    title = prod["title"] if prod else "your deal"
+                    cur.execute(
+                        """INSERT INTO notifications (user_id, title, message, type, deal_id)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (
+                            order["user_id"],
+                            "Deal Cancelled — Payment Released",
+                            f'The deal for "{title}" has been cancelled by the supplier. '
+                            f'Your payment authorization has been released and no charge was made.',
+                            "Deal",
+                            deal_id,
+                        )
+                    )
+                except Exception:
+                    pass
+            else:
+                failed += 1
+
+        cur.execute(
+            "UPDATE orders SET payment_status = 'Cancelled' WHERE deal_id = %s AND payment_status = 'Pending'",
+            (deal_id,)
+        )
+        cur.execute("UPDATE deals SET status = 'Stopped' WHERE id = %s", (deal_id,))
+        conn.commit()
+
+        return {
+            "message": "Deal cancelled and all payments released",
+            "authorized_refunded": refunded,
+            "stripe_failures": failed,
+        }
     finally:
         cur.close()
         conn.close()

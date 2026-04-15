@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext, useCallback } from "react";
 import { Link } from "react-router";
 import {
   FaPlus, FaUsers, FaClock, FaTags, FaEdit, FaStop, FaEye,
-  FaTimes, FaCheckCircle, FaTimesCircle, FaHourglassHalf, FaBoxOpen
+  FaTimes, FaCheckCircle, FaTimesCircle, FaHourglassHalf, FaBoxOpen, FaBan
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { formatCountdown, useCountdown } from "../../hooks/useCountdown";
@@ -182,7 +182,7 @@ const CustomersModal = ({ deal, token, onClose }) => {
   );
 };
 
-const DealRow = ({ deal, onEdit, onStop, onViewCustomers }) => {
+const DealRow = ({ deal, onEdit, onStop, onCancelRefund, onViewCustomers }) => {
   const product = deal.product || {};
   const progress = deal.progress_percent || 0;
 
@@ -245,9 +245,14 @@ const DealRow = ({ deal, onEdit, onStop, onViewCustomers }) => {
                 <FaEdit />
               </button>
               <button onClick={() => onStop(deal.id)}
-                title="Stop Deal"
-                className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition text-sm cursor-pointer">
+                title="Stop Deal (no refund)"
+                className="p-2 rounded-lg bg-orange-50 text-orange-500 hover:bg-orange-100 transition text-sm cursor-pointer">
                 <FaStop />
+              </button>
+              <button onClick={() => onCancelRefund(deal)}
+                title="Cancel Deal & Refund All"
+                className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition text-sm cursor-pointer">
+                <FaBan />
               </button>
             </>
           )}
@@ -282,11 +287,12 @@ const MyDeals = () => {
   const handleStop = async (dealId) => {
     const res = await Swal.fire({
       title: "Stop this deal?",
-      text: "All pending orders will be cancelled. This cannot be undone.",
+      text: "New orders will stop. Pending (uncharged) orders will be cancelled. Authorized payments are NOT released — use Cancel & Refund for that.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#d33",
+      confirmButtonColor: "#f97316",
       confirmButtonText: "Yes, Stop Deal",
+      allowOutsideClick: false,
     });
     if (!res.isConfirmed) return;
     try {
@@ -298,6 +304,69 @@ const MyDeals = () => {
       fetchDeals();
     } catch (err) {
       toast.error(err.message);
+    }
+  };
+
+  const handleCancelRefund = async (deal) => {
+    const product = deal.product || {};
+    const res = await Swal.fire({
+      title: "Cancel Deal & Refund All?",
+      html: `
+        <p class="text-gray-600 text-sm mb-3">
+          You are about to cancel <strong>"${product.title || "this deal"}"</strong>.
+        </p>
+        <ul class="text-left text-sm text-gray-700 space-y-1 bg-red-50 rounded-lg p-3">
+          <li>🔴 The deal will be permanently <strong>stopped</strong></li>
+          <li>💳 All <strong>Authorized</strong> card holds will be <strong>released</strong> immediately via Stripe</li>
+          <li>❌ All <strong>Pending</strong> orders will be <strong>cancelled</strong></li>
+          <li>🔔 Buyers with authorized payments will be <strong>notified</strong></li>
+        </ul>
+        <p class="text-xs text-red-500 mt-3 font-semibold">This action cannot be undone.</p>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Yes, Cancel & Refund All",
+      cancelButtonText: "Keep Deal",
+      allowOutsideClick: false,
+    });
+    if (!res.isConfirmed) return;
+
+    Swal.fire({
+      title: "Processing...",
+      text: "Releasing all payment holds via Stripe.",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+      const t = await user.getIdToken();
+      const r = await fetch(`/api/deals/${deal.id}/cancel-refund`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${t}` },
+      });
+      const data = await r.json();
+      Swal.close();
+      if (!r.ok) throw new Error(data.detail);
+      await Swal.fire({
+        title: "Deal Cancelled",
+        html: `
+          <p class="text-gray-600 text-sm">All payments have been released.</p>
+          <p class="text-xs text-gray-400 mt-2">
+            ${data.authorized_refunded} authorized payment(s) released via Stripe.
+            ${data.stripe_failures > 0 ? `<br/><span class="text-red-500">${data.stripe_failures} release(s) failed — check Stripe dashboard.</span>` : ""}
+          </p>
+        `,
+        icon: "success",
+        confirmButtonColor: "#34699A",
+        allowOutsideClick: false,
+      });
+      fetchDeals();
+    } catch (err) {
+      Swal.close();
+      toast.error(err.message || "Failed to cancel deal");
     }
   };
 
@@ -372,6 +441,7 @@ const MyDeals = () => {
               <DealRow key={d.id} deal={d}
                 onEdit={setEditDeal}
                 onStop={handleStop}
+                onCancelRefund={handleCancelRefund}
                 onViewCustomers={setCustomersDeal}
               />
             ))}
