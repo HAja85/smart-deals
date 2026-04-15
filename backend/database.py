@@ -91,6 +91,10 @@ def init_db():
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50) DEFAULT 'None'")
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,3)")
     cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_time TIMESTAMP")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(20)")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(30)")
+    cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(30) DEFAULT 'Pending'")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS notifications (

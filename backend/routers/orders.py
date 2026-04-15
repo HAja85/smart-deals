@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime, timezone
 from backend.database import get_connection
 from backend.auth import decode_token
-from backend.services.payment_service import create_payment_intent
+from backend.services.payment_service import create_payment_intent, cancel_payment
 from backend.routers.notifications import create_notification
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -47,12 +48,18 @@ def format_order(row: dict) -> dict:
 class OrderCreate(BaseModel):
     deal_id: int
     quantity: int
+    delivery_address: Optional[str] = None
+    mobile_number: Optional[str] = None
 
 
 @router.post("")
 def create_order(data: OrderCreate, user=Depends(consumer_only)):
     if data.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+    if not data.delivery_address or not data.delivery_address.strip():
+        raise HTTPException(status_code=400, detail="Delivery address is required")
+    if not data.mobile_number or not data.mobile_number.strip():
+        raise HTTPException(status_code=400, detail="Mobile number is required")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -77,12 +84,18 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         total_amount = float(deal["price_per_unit"]) * data.quantity
 
         cur.execute(
-            """INSERT INTO orders (user_id, deal_id, quantity, total_amount, payment_status)
-               VALUES (%s, %s, %s, %s, 'Pending') RETURNING *""",
-            (int(user["sub"]), data.deal_id, data.quantity, total_amount),
+            """INSERT INTO orders (user_id, deal_id, quantity, total_amount, payment_status,
+                                   delivery_address, mobile_number)
+               VALUES (%s, %s, %s, %s, 'Pending', %s, %s) RETURNING *""",
+            (int(user["sub"]), data.deal_id, data.quantity, total_amount,
+             data.delivery_address.strip(), data.mobile_number.strip()),
         )
         order = dict(cur.fetchone())
         order_id = order["id"]
+
+        order_number = f"ORD-{order_id:06d}"
+        cur.execute("UPDATE orders SET order_number = %s WHERE id = %s", (order_number, order_id))
+        order["order_number"] = order_number
 
         payment = create_payment_intent(order_id, total_amount)
         client_secret = payment.get("client_secret")
@@ -178,8 +191,9 @@ def get_supplier_orders(user=Depends(supplier_only)):
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT o.id, o.quantity, o.total_amount, o.payment_status, o.created_at, o.paid_at,
-                   o.refund_status, o.deal_id,
+            SELECT o.id, o.order_number, o.quantity, o.total_amount, o.payment_status,
+                   o.created_at, o.paid_at, o.refund_status, o.deal_id,
+                   o.delivery_address, o.mobile_number, o.delivery_status,
                    d.status as deal_status, d.end_time, d.target_quantity, d.current_quantity,
                    d.price_per_unit,
                    p.title as product_title, p.image as product_image, p.brand as product_brand,
@@ -205,6 +219,116 @@ def get_supplier_orders(user=Depends(supplier_only)):
                     d[ts] = d[ts].isoformat()
             result.append(d)
         return result
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/{order_id}/supplier-cancel")
+def supplier_cancel_order(order_id: int, user=Depends(supplier_only)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT o.*, d.seller_id, d.product_id, u.name as buyer_name
+            FROM orders o
+            JOIN deals d ON o.deal_id = d.id
+            JOIN users u ON o.user_id = u.id
+            WHERE o.id = %s
+        """, (order_id,))
+        order = cur.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        order = dict(order)
+        if order["seller_id"] != int(user["sub"]):
+            raise HTTPException(status_code=403, detail="Access denied")
+        if order["payment_status"] == "Cancelled":
+            raise HTTPException(status_code=400, detail="Order is already cancelled")
+        if order["payment_status"] == "Captured":
+            raise HTTPException(status_code=400, detail="Cannot cancel a captured order — issue a refund instead")
+
+        if order["payment_status"] == "Authorized" and order.get("stripe_payment_intent_id"):
+            cancel_payment(order["stripe_payment_intent_id"])
+
+        cur.execute(
+            "UPDATE orders SET payment_status = 'Cancelled' WHERE id = %s",
+            (order_id,)
+        )
+
+        cur.execute("UPDATE deals SET current_quantity = GREATEST(current_quantity - %s, 0) WHERE id = %s",
+                    (order["quantity"], order["deal_id"]))
+
+        try:
+            cur.execute("SELECT title FROM products WHERE id = %s", (order["product_id"],))
+            prod = cur.fetchone()
+            title = prod["title"] if prod else "a deal"
+            cur.execute(
+                """INSERT INTO notifications (user_id, title, message, type, deal_id)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (
+                    order["user_id"],
+                    "Order Cancelled by Supplier",
+                    f'Your order for "{title}" (Order #{order.get("order_number", order_id)}) has been cancelled by the supplier.'
+                    f' Any payment authorization has been released.',
+                    "Order",
+                    order["deal_id"],
+                )
+            )
+        except Exception:
+            pass
+
+        conn.commit()
+        return {"message": "Order cancelled successfully"}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/{order_id}/mark-delivered")
+def mark_order_delivered(order_id: int, user=Depends(supplier_only)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT o.*, d.seller_id, d.product_id
+            FROM orders o
+            JOIN deals d ON o.deal_id = d.id
+            WHERE o.id = %s
+        """, (order_id,))
+        order = cur.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        order = dict(order)
+        if order["seller_id"] != int(user["sub"]):
+            raise HTTPException(status_code=403, detail="Access denied")
+        if order["payment_status"] == "Cancelled":
+            raise HTTPException(status_code=400, detail="Cannot mark a cancelled order as delivered")
+
+        cur.execute(
+            "UPDATE orders SET delivery_status = 'Delivered' WHERE id = %s",
+            (order_id,)
+        )
+
+        try:
+            cur.execute("SELECT title FROM products WHERE id = %s", (order["product_id"],))
+            prod = cur.fetchone()
+            title = prod["title"] if prod else "a deal"
+            cur.execute(
+                """INSERT INTO notifications (user_id, title, message, type, deal_id)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (
+                    order["user_id"],
+                    "📦 Order Delivered!",
+                    f'Your order for "{title}" (Order #{order.get("order_number", order_id)}) has been marked as delivered by the supplier.',
+                    "Order",
+                    order["deal_id"],
+                )
+            )
+        except Exception:
+            pass
+
+        conn.commit()
+        return {"message": "Order marked as delivered"}
     finally:
         cur.close()
         conn.close()

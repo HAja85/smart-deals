@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { FaClock, FaUsers, FaArrowLeft, FaShoppingCart, FaTag, FaBoxOpen, FaPercent, FaCalendarAlt } from "react-icons/fa";
+import { FaClock, FaUsers, FaArrowLeft, FaShoppingCart, FaTag, FaBoxOpen, FaPercent, FaCalendarAlt, FaMapMarkerAlt, FaPhone } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useCountdown } from "../../hooks/useCountdown";
@@ -52,6 +52,8 @@ const DealDetail = () => {
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
   const [joining, setJoining] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [mobileNumber, setMobileNumber] = useState("");
 
   useEffect(() => {
     fetch(`/api/deals/${id}`)
@@ -65,13 +67,15 @@ const DealDetail = () => {
     if (!user) { toast.info("Please login to join a deal"); navigate("/login"); return; }
     if (user.role === "supplier") { toast.error("Suppliers cannot place orders. Switch to a consumer account."); return; }
     if (qty < 1) { toast.error("Quantity must be at least 1"); return; }
+    if (!deliveryAddress.trim()) { toast.error("Please enter your delivery address"); return; }
+    if (!mobileNumber.trim()) { toast.error("Please enter your mobile number"); return; }
     setJoining(true);
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ deal_id: parseInt(id), quantity: qty }),
+        body: JSON.stringify({ deal_id: parseInt(id), quantity: qty, delivery_address: deliveryAddress.trim(), mobile_number: mobileNumber.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to join deal");
@@ -198,6 +202,7 @@ const DealDetail = () => {
             {isActive && (
               <div className="bg-white rounded-2xl shadow-md p-6">
                 <h3 className="font-semibold text-gray-700 mb-4 flex items-center gap-2"><FaShoppingCart className="text-[#34699A]" /> Join This Deal</h3>
+
                 <div className="flex items-center gap-4 mb-4">
                   <label className="text-sm text-gray-600 font-medium">Quantity:</label>
                   <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
@@ -206,6 +211,34 @@ const DealDetail = () => {
                     <button onClick={() => setQty(q => q + 1)} className="px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold transition">+</button>
                   </div>
                 </div>
+
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm text-gray-600 font-medium mb-1.5">
+                      <FaPhone className="text-[#34699A] text-xs" /> Mobile Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+965 XXXX XXXX"
+                      value={mobileNumber}
+                      onChange={e => setMobileNumber(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:ring-2 focus:ring-[#34699A]/30 focus:border-[#34699A] transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm text-gray-600 font-medium mb-1.5">
+                      <FaMapMarkerAlt className="text-[#34699A] text-xs" /> Delivery Address
+                    </label>
+                    <textarea
+                      placeholder="Block, Street, House/Apartment No., Area, Kuwait"
+                      value={deliveryAddress}
+                      onChange={e => setDeliveryAddress(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl outline-none text-sm text-gray-800 focus:ring-2 focus:ring-[#34699A]/30 focus:border-[#34699A] transition resize-none"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 mb-4">
                   <span className="text-gray-600 text-sm">Total:</span>
                   <div className="text-right">
