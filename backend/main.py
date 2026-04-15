@@ -3,9 +3,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, get_connection
-from backend.routers import auth_router, products, deals, orders, search
+from backend.routers import auth_router, products, deals, orders, search, notifications
+from backend.routers.notifications import create_notification
 from backend.services import payment_service
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 app = FastAPI(title="SmartDeals Kuwait API")
 
@@ -41,6 +42,48 @@ def check_deal_statuses():
             end_time = deal["end_time"]
             if end_time.tzinfo is None:
                 end_time = end_time.replace(tzinfo=timezone.utc)
+
+            cur.execute("SELECT title FROM products WHERE id = %s", (deal["product_id"],))
+            prod = cur.fetchone()
+            product_title = prod["title"] if prod else "a product"
+
+            time_left = end_time - now
+            if timedelta(minutes=55) < time_left <= timedelta(hours=1):
+                cur.execute(
+                    "SELECT 1 FROM notifications WHERE deal_id = %s AND type = 'Expiry' AND created_at > NOW() - INTERVAL '2 hours'",
+                    (deal["id"],)
+                )
+                if not cur.fetchone():
+                    create_notification(
+                        conn,
+                        user_id=deal["seller_id"],
+                        title="⏰ Deal Expiring Soon",
+                        message=f"Your deal for \"{product_title}\" expires in about 1 hour. "
+                                f"Current progress: {deal['current_quantity']}/{deal['target_quantity']} units.",
+                        notif_type="Expiry",
+                        deal_id=deal["id"],
+                    )
+
+            target = deal["target_quantity"]
+            current = deal["current_quantity"]
+            if target > 0 and current > 0:
+                pct = (current / target) * 100
+                if 78 <= pct < 82:
+                    cur.execute(
+                        "SELECT 1 FROM notifications WHERE deal_id = %s AND type = 'Quantity' AND created_at > NOW() - INTERVAL '3 hours'",
+                        (deal["id"],)
+                    )
+                    if not cur.fetchone():
+                        create_notification(
+                            conn,
+                            user_id=deal["seller_id"],
+                            title="📦 Almost There! 80% Reached",
+                            message=f"Your deal for \"{product_title}\" is at {current}/{target} units ({round(pct, 1)}%). "
+                                    f"Just {target - current} more unit(s) to hit the target!",
+                            notif_type="Quantity",
+                            deal_id=deal["id"],
+                        )
+
             if now >= end_time:
                 if deal["current_quantity"] >= deal["target_quantity"]:
                     cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (deal["id"],))
@@ -56,6 +99,15 @@ def check_deal_statuses():
                         "UPDATE orders SET payment_status = 'Captured', paid_at = NOW() WHERE deal_id = %s AND payment_status = 'Authorized'",
                         (deal["id"],)
                     )
+                    create_notification(
+                        conn,
+                        user_id=deal["seller_id"],
+                        title="✅ Deal Successful!",
+                        message=f"Your deal for \"{product_title}\" has ended successfully with {deal['current_quantity']} units. "
+                                f"All payments have been captured.",
+                        notif_type="Deal",
+                        deal_id=deal["id"],
+                    )
                 else:
                     cur.execute("UPDATE deals SET status = 'Failed' WHERE id = %s", (deal["id"],))
                     cur.execute(
@@ -69,6 +121,16 @@ def check_deal_statuses():
                     cur.execute(
                         "UPDATE orders SET payment_status = 'Cancelled' WHERE deal_id = %s AND payment_status IN ('Pending', 'Authorized')",
                         (deal["id"],)
+                    )
+                    create_notification(
+                        conn,
+                        user_id=deal["seller_id"],
+                        title="❌ Deal Failed",
+                        message=f"Your deal for \"{product_title}\" expired without reaching the target. "
+                                f"Only {deal['current_quantity']}/{deal['target_quantity']} units were ordered. "
+                                f"All pending payments have been cancelled.",
+                        notif_type="Deal",
+                        deal_id=deal["id"],
                     )
 
         conn.commit()
@@ -99,6 +161,7 @@ app.include_router(products.router, prefix="/api")
 app.include_router(deals.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 
 
 def _format_deal_row(r, cur):

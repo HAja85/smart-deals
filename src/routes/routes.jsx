@@ -13,6 +13,7 @@ import Login from "../auth/Login/Login";
 import SignUp from "../auth/SignUp/SignUp";
 import PrivetRoutes from "./PrivetRoutes";
 import Payment from "../pages/Payment/Payment";
+import SupplierOrders from "../pages/SupplierOrders/SupplierOrders";
 
 export const router = createBrowserRouter([
   {
@@ -48,6 +49,10 @@ export const router = createBrowserRouter([
       {
         path: "/payment",
         element: <PrivetRoutes><Payment /></PrivetRoutes>,
+      },
+      {
+        path: "/supplier-orders",
+        element: <PrivetRoutes><SupplierOrders /></PrivetRoutes>,
       },
     ],
   },

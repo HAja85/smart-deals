@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from backend.database import get_connection
 from backend.auth import decode_token
 from backend.services.payment_service import create_payment_intent
+from backend.routers.notifications import create_notification
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 security = HTTPBearer()
@@ -100,6 +101,34 @@ def create_order(data: OrderCreate, user=Depends(consumer_only)):
         if new_qty >= deal["target_quantity"]:
             cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (data.deal_id,))
 
+        cur.execute(
+            "SELECT title FROM products WHERE id = %s", (deal["product_id"],)
+        )
+        product_row = cur.fetchone()
+        product_title = product_row["title"] if product_row else "a product"
+
+        progress_pct = round((new_qty / deal["target_quantity"]) * 100, 1) if deal["target_quantity"] > 0 else 0
+        create_notification(
+            conn,
+            user_id=deal["seller_id"],
+            title="New Order Placed",
+            message=f"A new order of {data.quantity} unit(s) was placed on your deal for \"{product_title}\". "
+                    f"Progress: {new_qty}/{deal['target_quantity']} ({progress_pct}%).",
+            notif_type="Order",
+            deal_id=data.deal_id,
+        )
+
+        if new_qty >= deal["target_quantity"]:
+            create_notification(
+                conn,
+                user_id=deal["seller_id"],
+                title="🎉 Deal Target Reached!",
+                message=f"Your deal for \"{product_title}\" has reached its target of {deal['target_quantity']} units. "
+                        f"Payments will be captured automatically.",
+                notif_type="Deal",
+                deal_id=data.deal_id,
+            )
+
         conn.commit()
         return format_order(order)
     finally:
@@ -127,6 +156,55 @@ def confirm_payment(order_id: int, user=Depends(consumer_only)):
         updated = dict(cur.fetchone())
         conn.commit()
         return format_order(updated)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def supplier_only(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if payload.get("role") != "supplier":
+        raise HTTPException(status_code=403, detail="Only suppliers can perform this action")
+    return payload
+
+
+@router.get("/supplier-orders")
+def get_supplier_orders(user=Depends(supplier_only)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT o.id, o.quantity, o.total_amount, o.payment_status, o.created_at, o.paid_at,
+                   o.refund_status, o.deal_id,
+                   d.status as deal_status, d.end_time, d.target_quantity, d.current_quantity,
+                   d.price_per_unit,
+                   p.title as product_title, p.image as product_image, p.brand as product_brand,
+                   p.unit as product_unit,
+                   u.name as buyer_name, u.email as buyer_email, u.image as buyer_image
+            FROM orders o
+            JOIN deals d ON o.deal_id = d.id
+            JOIN products p ON d.product_id = p.id
+            JOIN users u ON o.user_id = u.id
+            WHERE d.seller_id = %s
+            ORDER BY o.created_at DESC
+        """, (int(user["sub"]),))
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["_id"] = d["id"]
+            for amt in ["total_amount", "price_per_unit", "refund_amount"]:
+                if d.get(amt) is not None:
+                    d[amt] = float(d[amt])
+            for ts in ["created_at", "end_time", "paid_at", "refund_time"]:
+                if d.get(ts):
+                    d[ts] = d[ts].isoformat()
+            result.append(d)
+        return result
     finally:
         cur.close()
         conn.close()

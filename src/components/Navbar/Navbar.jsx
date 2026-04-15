@@ -2,10 +2,11 @@ import React, { useState, useContext } from "react";
 import { Link, NavLink } from "react-router";
 import {
   FaHome, FaSignInAlt, FaUserPlus, FaSignOutAlt, FaBars, FaTimes,
-  FaStore, FaShoppingBag, FaPlus, FaTags, FaShoppingCart,
+  FaStore, FaShoppingBag, FaPlus, FaTags, FaShoppingCart, FaClipboardList,
 } from "react-icons/fa";
 import { MdOutlineSmartToy } from "react-icons/md";
 import { AuthContext } from "../../context/AuthContext";
+import NotificationBell from "../NotificationBell/NotificationBell";
 
 const Navbar = () => {
   const { user, logoutUser, loading } = useContext(AuthContext);
@@ -18,6 +19,7 @@ const Navbar = () => {
     ...(user && isSupplier ? [
       { to: "/my-products", label: "My Products", icon: <FaStore /> },
       { to: "/my-deals", label: "My Deals", icon: <FaShoppingBag /> },
+      { to: "/supplier-orders", label: "All Orders", icon: <FaClipboardList /> },
       { to: "/create-product", label: "Add Product", icon: <FaPlus /> },
       { to: "/create-deal", label: "New Deal", icon: <FaTags /> },
     ] : []),
@@ -54,7 +56,7 @@ const Navbar = () => {
           ))}
         </div>
 
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-2">
           {loading ? (
             <div className="w-8 h-8 border-3 border-[#58A0C8] border-t-transparent rounded-full animate-spin" />
           ) : !user ? (
@@ -67,7 +69,8 @@ const Navbar = () => {
               </NavLink>
             </>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <NotificationBell />
               <div className="relative group cursor-pointer">
                 <img
                   src={user?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || "U")}&background=34699A&color=fff`}
@@ -102,6 +105,12 @@ const Navbar = () => {
                 {link.icon} {link.label}
               </NavLink>
             ))}
+            {user && (
+              <div className="flex items-center gap-2 px-2 py-1">
+                <NotificationBell />
+                <span className="text-sm text-gray-600">Notifications</span>
+              </div>
+            )}
             {!user ? (
               <>
                 <NavLink to="/login" className="flex items-center justify-center px-5 py-2 rounded-md font-medium text-white bg-gradient-to-r from-[#34699A] to-[#58A0C8]" onClick={() => setIsOpen(false)}>
