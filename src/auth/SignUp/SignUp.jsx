@@ -6,6 +6,7 @@ import {
 import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router";
+import Swal from "sweetalert2";
 
 const SignUp = () => {
   const { createUser, emailInput, setEmailInput } = useContext(AuthContext);
@@ -26,6 +27,7 @@ const SignUp = () => {
       return;
     }
 
+    Swal.close();
     createUser(email, password, displayName, photoURL, role)
       .then(() => {
         toast.success("Sign Up successful!");

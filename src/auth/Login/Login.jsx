@@ -9,6 +9,7 @@ import {
 import { toast } from "react-toastify";
 import { useLocation, useNavigate } from "react-router";
 import { AuthContext } from "../../context/AuthContext";
+import Swal from "sweetalert2";
 
 const Login = () => {
   const { loginUser, emailInput, setEmailInput } = useContext(AuthContext);
@@ -20,6 +21,7 @@ const Login = () => {
 
   const handleLogin = (e) => {
     e.preventDefault();
+    Swal.close();
     const email = e.target.email.value;
     const password = e.target.password.value;
 

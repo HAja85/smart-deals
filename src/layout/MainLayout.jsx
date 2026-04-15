@@ -1,10 +1,17 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import Navbar from '../components/Navbar/Navbar'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import Footer from '../components/Footer/Footer'
 import { Bounce, ToastContainer } from 'react-toastify'
+import Swal from 'sweetalert2'
 
 const MainLayout = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    Swal.close();
+  }, [location.pathname]);
+
   return (
     <>
       <ToastContainer

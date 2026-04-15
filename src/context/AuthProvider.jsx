@@ -66,11 +66,15 @@ const AuthProvider = ({ children }) => {
       confirmButtonColor: "#7C3AED",
       cancelButtonColor: "#d33",
       confirmButtonText: "Yes, Logout",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
     }).then((result) => {
       if (result.isConfirmed) {
         localStorage.removeItem(TOKEN_KEY);
         setUser(null);
-        Swal.fire({ icon: "success", title: "Logged Out!", showConfirmButton: false, timer: 2000 });
+        Swal.fire({ icon: "success", title: "Logged Out!", showConfirmButton: false, timer: 1500 });
+      } else {
+        Swal.close();
       }
     });
   };
