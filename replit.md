@@ -2,6 +2,13 @@
 
 Kuwait's group-buying marketplace for supermarket essentials. Built with React + Vite frontend and FastAPI + PostgreSQL backend.
 
+## Recent Additions
+- **Image Upload**: `POST /api/upload` endpoint (FastAPI, max 5 MB, JPG/PNG/WebP/GIF). Uploaded files stored in `/uploads/`, served as static files via `/uploads/<filename>`. Reusable `ImageUploader` component with drag-and-drop + file browse + paste URL tabs.
+- **Signup profile image**: uses `ImageUploader` instead of plain URL field
+- **Create Product image**: uses `ImageUploader` instead of plain URL field
+- **Redesigned Hero**: dark gradient (navy → teal), amber/gold accent colors, animated counter stats, category quick-filter chips, wave divider
+- **Enhanced Deal Cards**: hot/almost-full badges (fire icon), amber savings badge, coloured progress bar, hover lift animation
+
 ## Architecture
 
 ### Frontend (React + Vite)

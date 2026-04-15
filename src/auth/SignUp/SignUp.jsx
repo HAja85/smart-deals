@@ -1,8 +1,9 @@
 import React, { useState, useContext } from "react";
 import {
-  FaUser, FaEnvelope, FaLock, FaEye, FaEyeSlash, FaUserPlus, FaImage,
+  FaUser, FaEnvelope, FaLock, FaEye, FaEyeSlash, FaUserPlus,
   FaShoppingCart, FaInfoCircle, FaPhone, FaKey, FaCheckCircle,
 } from "react-icons/fa";
+import ImageUploader from "../../components/ImageUploader/ImageUploader";
 import { AuthContext } from "../../context/AuthContext";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router";
@@ -203,14 +204,11 @@ const SignUp = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block mb-1 text-gray-600 font-medium text-sm">Profile Image URL <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
-              <div className="flex items-center border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#34699A] transition">
-                <FaImage className="text-[#58A0C8] mr-2 shrink-0" />
-                <input type="url" value={form.photo} onChange={setF("photo")}
-                  placeholder="Paste image URL" className="w-full outline-none text-sm" />
-              </div>
-            </div>
+            <ImageUploader
+              value={form.photo}
+              onChange={url => setForm(f => ({ ...f, photo: url }))}
+              label="Profile Image (optional)"
+            />
 
             <div>
               <label className="block mb-1 text-gray-600 font-medium text-sm">Password</label>

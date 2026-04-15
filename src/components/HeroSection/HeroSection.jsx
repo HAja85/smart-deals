@@ -1,8 +1,39 @@
-import React, { useState } from "react";
-import { FaSearch, FaShoppingCart, FaTags } from "react-icons/fa";
-import bghero1 from "../../assets/bg-hero-left.png";
-import bghero2 from "../../assets/bg-hero-right.png";
+import React, { useState, useEffect } from "react";
+import { FaSearch, FaShoppingCart, FaTags, FaFire, FaUsers, FaCheckCircle, FaBolt } from "react-icons/fa";
 import { Link, useNavigate } from "react-router";
+
+const CATEGORIES = [
+  { label: "Rice & Grains", emoji: "🌾" },
+  { label: "Beverages", emoji: "🥤" },
+  { label: "Dairy", emoji: "🥛" },
+  { label: "Oils & Fats", emoji: "🫒" },
+  { label: "Snacks", emoji: "🍪" },
+  { label: "Cleaning", emoji: "🧹" },
+  { label: "Frozen Foods", emoji: "❄️" },
+  { label: "Canned Goods", emoji: "🥫" },
+];
+
+const AnimatedStat = ({ end, suffix, label }) => {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let start = 0;
+    const step = Math.ceil(end / 60);
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= end) { setCount(end); clearInterval(timer); }
+      else setCount(start);
+    }, 20);
+    return () => clearInterval(timer);
+  }, [end]);
+  return (
+    <div className="text-center">
+      <div className="text-2xl md:text-3xl font-extrabold text-white">
+        {count.toLocaleString()}{suffix}
+      </div>
+      <div className="text-blue-200 text-xs mt-0.5">{label}</div>
+    </div>
+  );
+};
 
 const HeroSection = () => {
   const [query, setQuery] = useState("");
@@ -15,55 +46,87 @@ const HeroSection = () => {
   };
 
   return (
-    <section className="relative min-h-[65vh] flex flex-col items-center justify-center text-center px-4 overflow-hidden bg-gradient-to-br from-sky-100 via-white to-emerald-50">
-      <img src={bghero1} alt="" className="absolute left-0 top-0 h-full w-auto object-contain opacity-80 pointer-events-none" />
-      <img src={bghero2} alt="" className="absolute right-0 top-0 h-full w-auto object-contain opacity-80 pointer-events-none" />
+    <section className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #0f2942 0%, #1a4a72 40%, #0e6655 100%)" }}>
+      <div className="absolute inset-0 opacity-10 pointer-events-none"
+        style={{ backgroundImage: "radial-gradient(circle at 20% 80%, #f59e0b 0%, transparent 50%), radial-gradient(circle at 80% 20%, #34d399 0%, transparent 50%)" }} />
 
-      <div className="z-10 max-w-3xl">
-        <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 text-sm font-semibold px-4 py-1.5 rounded-full mb-4">
-          <FaTags /> Kuwait's #1 Group Buying Marketplace
+      <div className="absolute top-10 left-10 w-72 h-72 rounded-full bg-blue-400/10 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
+
+      <div className="relative z-10 max-w-5xl mx-auto px-4 pt-16 pb-12 text-center">
+        <div className="inline-flex items-center gap-2 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-sm font-semibold px-4 py-1.5 rounded-full mb-5 backdrop-blur-sm">
+          <FaFire className="animate-pulse" /> Kuwait's #1 Group Buying Marketplace
         </div>
 
-        <h1 className="text-4xl md:text-6xl font-bold leading-tight text-gray-900">
-          Save More with <span className="text-[#34699A]">Group Buying</span>
-          <br />
-          <span className="text-emerald-600">Best Bulk Deals</span> in Kuwait
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight text-white mb-5">
+          Buy Together,{" "}
+          <span className="relative inline-block">
+            <span className="text-amber-400">Save More</span>
+            <span className="absolute -bottom-1 left-0 right-0 h-1 bg-amber-400/40 rounded-full" />
+          </span>
+          <br className="hidden sm:block" />
+          <span className="text-emerald-400"> Best Bulk Deals</span> in Kuwait
         </h1>
 
-        <p className="text-gray-600 mt-4 text-base md:text-lg max-w-2xl mx-auto">
-          Join thousands of Kuwaiti shoppers saving big on supermarket essentials.
-          The more people join a deal, the better the price — for everyone.
+        <p className="text-blue-100 mt-2 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
+          Join thousands of Kuwaiti shoppers. The more people that join a deal, the bigger the discount — for everyone.
         </p>
 
-        <form onSubmit={handleSearch} className="mt-8 flex justify-center">
-          <div className="flex items-center bg-white shadow-lg rounded-full px-4 w-full max-w-lg border border-gray-200">
+        <form onSubmit={handleSearch} className="mt-8 flex justify-center px-2">
+          <div className="flex items-center bg-white/95 backdrop-blur shadow-2xl rounded-2xl px-4 w-full max-w-xl border border-white/20">
+            <FaSearch className="text-gray-400 text-sm shrink-0" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search deals — rice, water, milk, oil..."
-              className="flex-1 py-3 px-3 outline-none text-gray-700 rounded-full text-sm"
+              className="flex-1 py-3.5 px-3 outline-none text-gray-700 bg-transparent text-sm"
             />
-            <button type="submit" className="bg-[#34699A] text-white p-3 rounded-full hover:bg-[#2d5a87] transition">
-              <FaSearch />
+            <button type="submit"
+              className="bg-gradient-to-r from-[#34699A] to-[#58A0C8] text-white px-5 py-2 rounded-xl hover:opacity-90 transition text-sm font-semibold shrink-0">
+              Search
             </button>
           </div>
         </form>
 
-        <div className="mt-6 flex flex-wrap justify-center gap-4">
-          <Link to="/deals" className="flex items-center gap-2 bg-[#34699A] text-white font-semibold px-6 py-3 rounded-xl shadow-md hover:bg-[#2d5a87] transition">
-            <FaTags /> Browse All Deals
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {CATEGORIES.map(cat => (
+            <button key={cat.label} onClick={() => navigate(`/deals?search=${encodeURIComponent(cat.label)}`)}
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-full transition backdrop-blur-sm">
+              <span>{cat.emoji}</span> {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <Link to="/deals"
+            className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-gray-900 font-bold px-6 py-3 rounded-xl shadow-lg hover:shadow-amber-400/30 transition">
+            <FaBolt /> Browse All Deals
           </Link>
-          <Link to="/signup" className="flex items-center gap-2 border-2 border-emerald-600 text-emerald-700 font-semibold px-6 py-3 rounded-xl hover:bg-emerald-600 hover:text-white transition">
+          <Link to="/signup"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold px-6 py-3 rounded-xl backdrop-blur-sm transition">
             <FaShoppingCart /> Join for Free
           </Link>
         </div>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-gray-500">
-          <div className="flex items-center gap-2"><span className="text-emerald-500 font-bold text-lg">50+</span> Products</div>
-          <div className="flex items-center gap-2"><span className="text-[#34699A] font-bold text-lg">د.ك</span> KWD Pricing</div>
-          <div className="flex items-center gap-2"><span className="text-emerald-500 font-bold text-lg">100%</span> Halal Certified</div>
+        <div className="mt-10 grid grid-cols-3 gap-4 max-w-sm mx-auto border-t border-white/10 pt-8">
+          <AnimatedStat end={500} suffix="+" label="Active Deals" />
+          <AnimatedStat end={12000} suffix="+" label="Happy Buyers" />
+          <AnimatedStat end={35} suffix="%" label="Avg. Savings" />
         </div>
+
+        <div className="mt-6 flex flex-wrap justify-center gap-4 text-xs text-blue-200">
+          <span className="flex items-center gap-1.5"><FaCheckCircle className="text-emerald-400" /> Halal Certified</span>
+          <span className="flex items-center gap-1.5"><FaCheckCircle className="text-emerald-400" /> KWD Pricing</span>
+          <span className="flex items-center gap-1.5"><FaCheckCircle className="text-emerald-400" /> Kuwait-wide Delivery</span>
+          <span className="flex items-center gap-1.5"><FaUsers className="text-emerald-400" /> Group-verified Suppliers</span>
+        </div>
+      </div>
+
+      <div className="relative z-10 overflow-hidden">
+        <svg viewBox="0 0 1440 60" preserveAspectRatio="none" className="w-full h-10 sm:h-14" fill="white">
+          <path d="M0,60 C480,0 960,0 1440,60 L1440,60 L0,60 Z" />
+        </svg>
       </div>
     </section>
   );

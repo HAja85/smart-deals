@@ -1,5 +1,8 @@
 import os
-from fastapi import FastAPI
+import uuid
+import shutil
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, get_connection
@@ -7,6 +10,11 @@ from backend.routers import auth_router, products, deals, orders, search, notifi
 from backend.routers.notifications import create_notification
 from backend.services import payment_service
 from datetime import datetime, timezone, timedelta
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_SIZE_MB = 5
 
 app = FastAPI(title="SmartDeals Kuwait API")
 
@@ -163,6 +171,22 @@ app.include_router(orders.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+@app.post("/api/upload")
+async def upload_image(file: UploadFile = File(...)):
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WebP, or GIF images are allowed.")
+    contents = await file.read()
+    if len(contents) > MAX_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File must be smaller than {MAX_SIZE_MB} MB.")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    return {"url": f"/uploads/{filename}", "filename": filename}
 
 
 def _format_deal_row(r, cur):

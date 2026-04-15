@@ -1,8 +1,9 @@
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { Link } from "react-router";
 import { FaArrowLeft } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import Swal from "sweetalert2";
+import ImageUploader from "../../components/ImageUploader/ImageUploader";
 
 const CATEGORIES = [
   "Grains & Rice", "Oils & Fats", "Beverages", "Dairy", "Eggs & Poultry",
@@ -14,15 +15,20 @@ const CATEGORIES = [
 
 const CreatedProduct = () => {
   const { user } = useContext(AuthContext);
+  const [productImage, setProductImage] = useState("");
 
   const handleCreateProduct = async (e) => {
     e.preventDefault();
+    if (!productImage) {
+      Swal.fire({ title: "Image Required", text: "Please upload or provide a product image.", icon: "warning" });
+      return;
+    }
     const formData = {
       title: e.target.title.value,
       category: e.target.category.value,
       brand: e.target.brand.value,
       unit: e.target.unit.value,
-      image: e.target.productImageUrl.value,
+      image: productImage,
       seller_name: e.target.sellerName.value,
       seller_contact: e.target.sellerContact.value,
       location: e.target.location.value,
@@ -39,6 +45,7 @@ const CreatedProduct = () => {
       if (!res.ok) throw new Error(data.detail || "Failed to create product");
       Swal.fire({ title: "Product Added!", text: "You can now create a deal for this product.", icon: "success" });
       e.target.reset();
+      setProductImage("");
     } catch (err) {
       Swal.fire({ title: "Error", text: err.message, icon: "error" });
     }
@@ -79,10 +86,11 @@ const CreatedProduct = () => {
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Product Image URL *</label>
-            <input type="url" name="productImageUrl" required placeholder="https://..." className={inputCls} />
-          </div>
+          <ImageUploader
+            value={productImage}
+            onChange={setProductImage}
+            label="Product Image *"
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>

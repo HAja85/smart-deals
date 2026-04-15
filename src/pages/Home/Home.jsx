@@ -4,68 +4,100 @@ import HeroSection from "../../components/HeroSection/HeroSection";
 import Testimonial from "../../components/Testimonial/Testimonial";
 import FAQ from "../../components/FAQ/FAQ";
 import { useCountdown, formatCountdown } from "../../hooks/useCountdown";
-import { FaClock, FaTags, FaUsers, FaCalendarAlt } from "react-icons/fa";
+import { FaClock, FaTags, FaUsers, FaCalendarAlt, FaFire, FaBolt } from "react-icons/fa";
 
 const DealCard = ({ deal, isUpcoming = false }) => {
   const countdown = useCountdown(isUpcoming ? deal.start_time : deal.end_time);
   const progress = deal.progress_percent || 0;
   const product = deal.product || {};
   const discountPct = deal.discount_percent || 0;
+  const isHot = !isUpcoming && progress >= 60;
+  const isAlmostFull = !isUpcoming && progress >= 85;
 
   return (
     <Link to={`/deals/${deal.id}`}
-      className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 flex flex-col">
-      <div className="relative overflow-hidden h-44">
+      className="group bg-white rounded-2xl shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden border border-gray-100 flex flex-col">
+      <div className="relative overflow-hidden h-48">
         <img src={product.image || "https://placehold.co/400x200?text=Product"} alt={product.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        <span className={`absolute top-3 left-3 text-xs font-semibold px-2.5 py-1 rounded-full ${
-          isUpcoming ? "bg-purple-100 text-purple-700" : "bg-emerald-100 text-emerald-700"
-        }`}>
-          {isUpcoming ? "Coming Soon" : "Active"}
-        </span>
+          className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+        <div className="absolute top-3 left-3 flex flex-col gap-1">
+          {isAlmostFull ? (
+            <span className="flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+              <FaFire className="animate-pulse" /> Almost Full!
+            </span>
+          ) : isHot ? (
+            <span className="flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
+              <FaFire /> Hot Deal
+            </span>
+          ) : (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shadow ${
+              isUpcoming ? "bg-purple-500 text-white" : "bg-emerald-500 text-white"
+            }`}>
+              {isUpcoming ? "Coming Soon" : "Active"}
+            </span>
+          )}
+        </div>
+
         {discountPct > 0 && (
-          <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">-{discountPct}%</span>
+          <span className="absolute top-3 right-3 bg-amber-400 text-gray-900 text-xs font-extrabold px-2.5 py-1 rounded-full shadow">
+            -{discountPct}%
+          </span>
         )}
         {product.brand && (
-          <span className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
+          <span className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded-full">{product.brand}</span>
         )}
       </div>
+
       <div className="p-4 flex flex-col gap-2 flex-1">
         <h3 className="font-semibold text-gray-800 text-sm leading-tight line-clamp-2">{product.title}</h3>
-        <p className="text-xs text-gray-500">{product.unit} · {product.category}</p>
+        <p className="text-xs text-gray-400">{product.unit} · {product.category}</p>
 
-        <div className="flex items-center justify-between mt-1">
+        <div className="flex items-end justify-between mt-1">
           <div>
             {deal.actual_price && (
               <p className="text-xs text-gray-400 line-through">{parseFloat(deal.actual_price).toFixed(3)} KWD</p>
             )}
-            <span className="text-lg font-bold text-[#34699A]">{parseFloat(deal.price_per_unit).toFixed(3)} <span className="text-sm font-normal text-gray-500">KWD</span></span>
+            <span className="text-xl font-extrabold text-[#34699A]">{parseFloat(deal.price_per_unit).toFixed(3)}</span>
+            <span className="text-xs font-medium text-gray-400 ml-1">KWD</span>
           </div>
-          {!isUpcoming && (
-            <span className="text-xs text-gray-500 flex items-center gap-1">
-              <FaUsers className="text-[#58A0C8]" /> {deal.current_quantity}/{deal.target_quantity}
+          {deal.actual_price && discountPct > 0 && (
+            <span className="text-xs bg-amber-50 text-amber-600 font-semibold px-2 py-1 rounded-lg border border-amber-200">
+              Save {(parseFloat(deal.actual_price) - parseFloat(deal.price_per_unit)).toFixed(3)} KWD
             </span>
           )}
         </div>
 
         {!isUpcoming && (
           <div>
-            <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Progress</span><span>{progress}%</span></div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div className="bg-gradient-to-r from-[#34699A] to-emerald-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span className="flex items-center gap-1"><FaUsers className="text-[#58A0C8]" /> {deal.current_quantity}/{deal.target_quantity} joined</span>
+              <span className={`font-semibold ${isAlmostFull ? "text-red-500" : isHot ? "text-orange-500" : "text-gray-500"}`}>{progress}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div className={`h-2.5 rounded-full transition-all duration-500 ${
+                isAlmostFull ? "bg-gradient-to-r from-red-400 to-red-600 shadow-sm shadow-red-300"
+                : isHot ? "bg-gradient-to-r from-orange-400 to-amber-500 shadow-sm shadow-orange-200"
+                : "bg-gradient-to-r from-[#34699A] to-emerald-500"
+              }`} style={{ width: `${progress}%` }} />
             </div>
           </div>
         )}
 
-        <div className={`flex items-center gap-1.5 text-xs font-semibold mt-1 ${countdown.expired ? "text-red-500" : isUpcoming ? "text-purple-600" : "text-orange-500"}`}>
+        <div className={`flex items-center gap-1.5 text-xs font-semibold mt-1 ${
+          countdown.expired ? "text-red-500" : isUpcoming ? "text-purple-600" : countdown.hours < 2 ? "text-red-500" : "text-orange-500"
+        }`}>
           {isUpcoming ? <FaCalendarAlt /> : <FaClock />}
           {isUpcoming ? `Starts in ${formatCountdown(countdown)}` : formatCountdown(countdown)}
         </div>
 
-        <button className={`mt-auto w-full py-2 text-white text-sm font-medium rounded-lg hover:opacity-90 transition ${
-          isUpcoming ? "bg-gradient-to-r from-purple-500 to-purple-600" : "bg-gradient-to-r from-[#34699A] to-[#58A0C8]"
+        <button className={`mt-auto w-full py-2.5 text-white text-sm font-semibold rounded-xl hover:opacity-90 hover:scale-[1.01] transition-all ${
+          isUpcoming ? "bg-gradient-to-r from-purple-500 to-purple-700"
+          : isAlmostFull ? "bg-gradient-to-r from-red-500 to-red-600"
+          : "bg-gradient-to-r from-[#34699A] to-[#58A0C8]"
         }`}>
-          {isUpcoming ? "Preview Deal" : "Join Deal"}
+          {isUpcoming ? "Preview Deal" : isAlmostFull ? "⚡ Join Now — Almost Full!" : "Join Deal"}
         </button>
       </div>
     </Link>
