@@ -1,3 +1,6 @@
+import random
+import string
+from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -8,13 +11,25 @@ from backend.auth import hash_password, verify_password, create_access_token, de
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer()
 
+OTP_EXPIRY_MINUTES = 10
+
+
+def _gen_otp() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+class SendOtpRequest(BaseModel):
+    target: str
+
 
 class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    mobile_number: str
+    email_otp: str
+    mobile_otp: str
     image: Optional[str] = None
-    role: Optional[str] = "consumer"
 
 
 class LoginRequest(BaseModel):
@@ -32,6 +47,7 @@ def format_user(row: dict, token: str = None) -> dict:
         "image": row.get("image") or "",
         "photoURL": row.get("image") or "",
         "role": row.get("role", "consumer"),
+        "mobile_number": row.get("mobile_number") or "",
         **({"accessToken": token} if token else {}),
     }
 
@@ -44,24 +60,110 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     return payload
 
 
+@router.post("/send-email-otp")
+def send_email_otp(req: SendOtpRequest):
+    email = req.target.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email address is required")
+
+    otp = _gen_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE email_otps SET used = TRUE WHERE email = %s AND used = FALSE",
+            (email,),
+        )
+        cur.execute(
+            "INSERT INTO email_otps (email, otp, expires_at) VALUES (%s, %s, %s)",
+            (email, otp, expires_at),
+        )
+        conn.commit()
+        return {
+            "message": f"OTP sent to {email}",
+            "otp": otp,
+            "expires_in_minutes": OTP_EXPIRY_MINUTES,
+            "demo_mode": True,
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/send-mobile-otp")
+def send_mobile_otp(req: SendOtpRequest):
+    mobile = req.target.strip()
+    if not mobile:
+        raise HTTPException(status_code=400, detail="Mobile number is required")
+
+    otp = _gen_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE otp_verifications SET used = TRUE WHERE mobile_number = %s AND used = FALSE",
+            (mobile,),
+        )
+        cur.execute(
+            "INSERT INTO otp_verifications (mobile_number, otp, expires_at) VALUES (%s, %s, %s)",
+            (mobile, otp, expires_at),
+        )
+        conn.commit()
+        return {
+            "message": f"OTP sent to {mobile}",
+            "otp": otp,
+            "expires_in_minutes": OTP_EXPIRY_MINUTES,
+            "demo_mode": True,
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
 @router.post("/register")
 def register(req: RegisterRequest):
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
-    role = "consumer"
+    email = req.email.strip().lower()
+    mobile = req.mobile_number.strip()
 
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id FROM users WHERE email = %s", (req.email,))
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Email already registered")
 
+        cur.execute(
+            "SELECT id, expires_at FROM email_otps WHERE email = %s AND otp = %s AND used = FALSE ORDER BY created_at DESC LIMIT 1",
+            (email, req.email_otp.strip()),
+        )
+        email_rec = cur.fetchone()
+        if not email_rec:
+            raise HTTPException(status_code=400, detail="Invalid email OTP. Please request a new one.")
+        if datetime.utcnow() > email_rec["expires_at"]:
+            raise HTTPException(status_code=400, detail="Email OTP has expired. Please request a new one.")
+
+        cur.execute(
+            "SELECT id, expires_at FROM otp_verifications WHERE mobile_number = %s AND otp = %s AND used = FALSE ORDER BY created_at DESC LIMIT 1",
+            (mobile, req.mobile_otp.strip()),
+        )
+        mobile_rec = cur.fetchone()
+        if not mobile_rec:
+            raise HTTPException(status_code=400, detail="Invalid mobile OTP. Please request a new one.")
+        if datetime.utcnow() > mobile_rec["expires_at"]:
+            raise HTTPException(status_code=400, detail="Mobile OTP has expired. Please request a new one.")
+
+        cur.execute("UPDATE email_otps SET used = TRUE WHERE id = %s", (email_rec["id"],))
+        cur.execute("UPDATE otp_verifications SET used = TRUE WHERE id = %s", (mobile_rec["id"],))
+
         hashed = hash_password(req.password)
         cur.execute(
-            "INSERT INTO users (name, email, password_hash, image, role) VALUES (%s, %s, %s, %s, %s) RETURNING *",
-            (req.name, req.email, hashed, req.image, role),
+            "INSERT INTO users (name, email, password_hash, image, role, mobile_number, is_verified) VALUES (%s, %s, %s, %s, %s, %s, TRUE) RETURNING *",
+            (req.name, email, hashed, req.image, "consumer", mobile),
         )
         user = dict(cur.fetchone())
         conn.commit()
