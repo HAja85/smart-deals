@@ -316,14 +316,18 @@ export default function DealsScreen() {
         <FlatList
           data={filteredDeals}
           keyExtractor={(item) => String(item.id)}
+          numColumns={2}
+          columnWrapperStyle={{ gap: 12, paddingHorizontal: 16, marginBottom: 12 }}
           renderItem={({ item }) => (
-            <DealCard
-              deal={item}
-              showStatus={tabMode !== 'Active'}
-              onPress={() => router.push(`/deal/${item.id}` as Href)}
-            />
+            <View style={{ flex: 1 }}>
+              <DealCard
+                deal={item}
+                showStatus={tabMode !== 'Active'}
+                onPress={() => router.push(`/deal/${item.id}` as Href)}
+              />
+            </View>
           )}
-          contentContainerStyle={s.list}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

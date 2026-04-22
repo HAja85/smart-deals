@@ -95,7 +95,7 @@ function CartItemRow({
     if (!isExpired) return;
     const timer = setTimeout(() => {
       onRemove(item.deal_id, true);
-    }, 4000);
+    }, 3000);
     return () => clearTimeout(timer);
   }, [isExpired]);
 
@@ -243,7 +243,7 @@ export default function CartScreen() {
       const res = await api.get<CartResponse>('/cart');
       return res.data;
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   useEffect(() => {
@@ -318,7 +318,10 @@ export default function CartScreen() {
   const now = Date.now();
   const items: CartItem[] = cartData?.items ?? [];
   const activeItems = items.filter(
-    (i) => !i.end_time || new Date(i.end_time).getTime() >= now
+    (i) =>
+      !i.is_expired &&
+      (i.deal_status == null || i.deal_status === 'Active') &&
+      (!i.end_time || new Date(i.end_time).getTime() >= now)
   );
   const total = activeItems.reduce((sum, i) => sum + (i.line_total ?? Number(i.price_per_unit) * i.quantity), 0);
 

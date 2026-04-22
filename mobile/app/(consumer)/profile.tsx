@@ -171,6 +171,12 @@ export default function ProfileScreen() {
   const totalOrders = ordersData?.total ?? 0;
   const totalSpent = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
   const activeDeals = orders.filter((o) => o.payment_status === 'Authorized' || o.payment_status === 'Pending').length;
+  const totalSaved = orders.reduce((sum, o) => {
+    const actual = Number(o.actual_price ?? 0);
+    const paid = Number(o.price_per_unit ?? 0);
+    const qty = o.quantity ?? 1;
+    return actual > paid ? sum + (actual - paid) * qty : sum;
+  }, 0);
 
   const handlePickImage = async () => {
     if (Platform.OS === 'web') {
@@ -326,6 +332,10 @@ export default function ProfileScreen() {
           <View style={s.statCard}>
             <Text style={[s.statNum, { fontSize: 14 }]}>KWD {totalSpent.toFixed(1)}</Text>
             <Text style={s.statLabel}>Spent</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={[s.statNum, { fontSize: 14, color: '#10B981' }]}>KWD {totalSaved.toFixed(1)}</Text>
+            <Text style={s.statLabel}>Saved</Text>
           </View>
         </View>
 

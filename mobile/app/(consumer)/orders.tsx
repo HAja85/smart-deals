@@ -35,20 +35,20 @@ interface Section {
   data: Order[];
 }
 
-function getMonthLabel(dateStr?: string): string {
-  if (!dateStr) return 'Unknown';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-KW', { month: 'long', year: 'numeric' });
-}
+const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
+  { label: 'Pending Payment', statuses: ['Pending'] },
+  { label: 'Paid / Authorized', statuses: ['Authorized', 'Captured'] },
+  { label: 'Delivered', statuses: ['Delivered'] },
+  { label: 'Other', statuses: ['Cancelled', 'Refunded', 'Failed'] },
+];
 
-function groupOrdersByMonth(orders: Order[]): Section[] {
-  const map = new Map<string, Order[]>();
-  for (const order of orders) {
-    const key = getMonthLabel(order.created_at);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(order);
-  }
-  return [...map.entries()].map(([title, data]) => ({ title, data }));
+function groupOrdersByStatus(orders: Order[]): Section[] {
+  return STATUS_GROUPS
+    .map(({ label, statuses }) => ({
+      title: label,
+      data: orders.filter((o) => statuses.includes(o.payment_status ?? '') || statuses.includes(o.delivery_status ?? '')),
+    }))
+    .filter((s) => s.data.length > 0);
 }
 
 function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
@@ -141,7 +141,7 @@ export default function OrdersScreen() {
 
   const allOrders = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
-  const sections = groupOrdersByMonth(allOrders);
+  const sections = groupOrdersByStatus(allOrders);
 
   const confirmedOrders = allOrders.filter((o) => ['Authorized', 'Captured'].includes(o.payment_status)).length;
   const totalSpent = allOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
