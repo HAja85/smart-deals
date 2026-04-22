@@ -36,8 +36,8 @@ interface Section {
 }
 
 const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
-  { label: 'Pending Payment', statuses: ['Pending'] },
-  { label: 'Paid / Authorized', statuses: ['Authorized', 'Captured'] },
+  { label: 'Pending', statuses: ['Pending'] },
+  { label: 'Paid', statuses: ['Authorized', 'Captured'] },
   { label: 'Delivered', statuses: ['Delivered'] },
   { label: 'Other', statuses: ['Cancelled', 'Refunded', 'Failed'] },
 ];

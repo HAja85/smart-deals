@@ -383,6 +383,9 @@ def cancel_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
 
         conn.commit()
         return {"message": "Checkout cancelled and cart restored", "cancelled": len(rows)}
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))

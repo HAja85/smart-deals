@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, type Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -113,6 +113,14 @@ export default function DealsScreen() {
       },
       enabled: tabMode !== 'Trending',
     });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (tabMode === 'Trending') {
+        refetchTrending();
+      }
+    }, [tabMode, refetchTrending])
+  );
 
   const deals: Deal[] = data?.pages.flatMap((p) => p.items) ?? [];
 
