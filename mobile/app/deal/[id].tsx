@@ -81,6 +81,8 @@ export default function DealDetailScreen() {
     }
   }, [id]));
 
+  const timeLeft = useCountdown(deal?.end_time);
+
   const handleAddToCart = async () => {
     if (!user) {
       router.push('/(auth)/login' as Href);
@@ -135,7 +137,6 @@ export default function DealDetailScreen() {
   const progressPct = deal.progress_percent ?? Math.round(progress * 100);
   const isHot = progress >= 0.8;
   const isAlmostFull = progress >= 0.6 && progress < 0.8;
-  const timeLeft = useCountdown(deal.end_time);
   const lineTotal = (pricePerUnit * qty).toFixed(3);
   const isActive = deal.status === 'Active';
 
