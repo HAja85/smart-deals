@@ -501,28 +501,6 @@ def _get_order_full(order_id: int, cur):
     return dict(row)
 
 
-@router.get("/{order_id}")
-def get_order_detail(order_id: int, user=Depends(required_user)):
-    """Return full order detail. Consumer can only view their own; supplier can view orders on their deals."""
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        row = _get_order_full(order_id, cur)
-        uid = int(user["sub"])
-        role = user.get("role")
-        if role == "consumer" and row["user_id"] != uid:
-            raise HTTPException(status_code=403, detail="Access denied")
-        if role == "supplier" and row["seller_id"] != uid:
-            raise HTTPException(status_code=403, detail="Access denied")
-        for f in ["total_amount", "price_per_unit", "actual_price", "refund_amount"]:
-            if row.get(f) is not None:
-                row[f] = float(row[f])
-        return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
-    finally:
-        cur.close()
-        conn.close()
-
-
 @router.get("/{order_id}/invoice")
 def download_invoice(order_id: int, user=Depends(required_user)):
     """Download invoice PDF for an order. Consumer sees their own; supplier sees orders on their deals."""
@@ -680,6 +658,29 @@ def get_my_orders(
             "total": total,
             "has_more": offset + len(result) < total,
         }
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/{order_id}")
+def get_order_detail(order_id: int, user=Depends(required_user)):
+    """Return full order detail. Consumer sees own orders; supplier sees orders on their deals.
+    Declared after all static routes (/my-orders, /supplier-orders) to avoid shadowing."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        row = _get_order_full(order_id, cur)
+        uid = int(user["sub"])
+        role = user.get("role")
+        if role == "consumer" and row["user_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if role == "supplier" and row["seller_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        for f in ["total_amount", "price_per_unit", "actual_price", "refund_amount"]:
+            if row.get(f) is not None:
+                row[f] = float(row[f])
+        return {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
     finally:
         cur.close()
         conn.close()
