@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 from backend.database import init_db, seed_db, seed_demo_data, get_connection
 from backend.routers import auth_router, products, deals, orders, search, notifications, admin
+from backend.routers import cart, push, reports
 from backend.routers.notifications import create_notification
 from backend.services import payment_service
+from backend.services.push_service import send_push, get_users_tokens
 from datetime import datetime, timezone, timedelta
 
 UPLOAD_DIR = "uploads"
@@ -97,10 +99,11 @@ def check_deal_statuses():
                 if deal["current_quantity"] >= deal["target_quantity"]:
                     cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (deal["id"],))
                     cur.execute(
-                        "SELECT id, stripe_payment_intent_id FROM orders WHERE deal_id = %s AND payment_status = 'Authorized'",
+                        "SELECT id, stripe_payment_intent_id, user_id FROM orders WHERE deal_id = %s AND payment_status = 'Authorized'",
                         (deal["id"],)
                     )
-                    for order in cur.fetchall():
+                    affected_orders = cur.fetchall()
+                    for order in affected_orders:
                         order = dict(order)
                         if order.get("stripe_payment_intent_id"):
                             payment_service.capture_payment(order["stripe_payment_intent_id"])
@@ -117,13 +120,26 @@ def check_deal_statuses():
                         notif_type="Deal",
                         deal_id=deal["id"],
                     )
+                    try:
+                        consumer_ids = [dict(o)["user_id"] for o in affected_orders if dict(o).get("user_id")]
+                        tokens = get_users_tokens(conn, consumer_ids)
+                        send_push(tokens, "🎉 Your Group Deal Succeeded!",
+                                  f'"{product_title}" reached its target. Payment captured!',
+                                  {"type": "deal", "deal_id": deal["id"]})
+                        supplier_tokens = get_users_tokens(conn, [deal["seller_id"]])
+                        send_push(supplier_tokens, "✅ Deal Successful!", f'"{product_title}" reached its target.',
+                                  {"type": "deal", "deal_id": deal["id"]})
+                    except Exception:
+                        pass
+                    cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
                 else:
                     cur.execute("UPDATE deals SET status = 'Failed' WHERE id = %s", (deal["id"],))
                     cur.execute(
-                        "SELECT id, stripe_payment_intent_id FROM orders WHERE deal_id = %s AND payment_status IN ('Pending', 'Authorized')",
+                        "SELECT id, stripe_payment_intent_id, user_id FROM orders WHERE deal_id = %s AND payment_status IN ('Pending', 'Authorized')",
                         (deal["id"],)
                     )
-                    for order in cur.fetchall():
+                    failed_orders = cur.fetchall()
+                    for order in failed_orders:
                         order = dict(order)
                         if order.get("stripe_payment_intent_id"):
                             payment_service.cancel_payment(order["stripe_payment_intent_id"])
@@ -141,6 +157,18 @@ def check_deal_statuses():
                         notif_type="Deal",
                         deal_id=deal["id"],
                     )
+                    try:
+                        consumer_ids = [dict(o)["user_id"] for o in failed_orders if dict(o).get("user_id")]
+                        tokens = get_users_tokens(conn, consumer_ids)
+                        send_push(tokens, "❌ Deal Expired",
+                                  f'"{product_title}" didn\'t reach its target. No charge was made.',
+                                  {"type": "deal", "deal_id": deal["id"]})
+                        supplier_tokens = get_users_tokens(conn, [deal["seller_id"]])
+                        send_push(supplier_tokens, "❌ Deal Failed", f'"{product_title}" expired without reaching the target.',
+                                  {"type": "deal", "deal_id": deal["id"]})
+                    except Exception:
+                        pass
+                    cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
 
         conn.commit()
         cur.close()
@@ -174,6 +202,9 @@ app.include_router(orders.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(cart.router, prefix="/api")
+app.include_router(push.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 

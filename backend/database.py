@@ -136,6 +136,29 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cart_items (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            deal_id INTEGER REFERENCES deals(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            added_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (user_id, deal_id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS push_tokens (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            token TEXT UNIQUE NOT NULL,
+            platform VARCHAR(50) DEFAULT 'expo',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    cur.execute("ALTER TABLE deals ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0")
+
     conn.commit()
     cur.close()
     conn.close()

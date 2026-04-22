@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from backend.database import get_connection
 from backend.auth import decode_token
 from backend.services.payment_service import create_payment_intent, cancel_payment
 from backend.routers.notifications import create_notification
+from backend.services.pdf_service import generate_invoice, generate_delivery_note
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 security = HTTPBearer()
@@ -411,6 +413,184 @@ def mark_order_delivered(order_id: int, user=Depends(supplier_only)):
 
         conn.commit()
         return {"message": "Order marked as delivered"}
+    finally:
+        cur.close()
+        conn.close()
+
+
+class DeliveryStatusUpdate(BaseModel):
+    delivery_status: str
+
+
+@router.patch("/{order_id}/delivery-status")
+def update_delivery_status(order_id: int, data: DeliveryStatusUpdate, user=Depends(supplier_only)):
+    """Update delivery status of an order (supplier only)."""
+    allowed = {"Pending", "Shipped", "Delivered"}
+    if data.delivery_status not in allowed:
+        raise HTTPException(status_code=400, detail=f"delivery_status must be one of: {', '.join(allowed)}")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT o.*, d.seller_id, d.product_id
+            FROM orders o
+            JOIN deals d ON o.deal_id = d.id
+            WHERE o.id = %s
+        """, (order_id,))
+        order = cur.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        order = dict(order)
+        if order["seller_id"] != int(user["sub"]):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        cur.execute(
+            "UPDATE orders SET delivery_status = %s WHERE id = %s",
+            (data.delivery_status, order_id)
+        )
+
+        try:
+            cur.execute("SELECT title FROM products WHERE id = %s", (order["product_id"],))
+            prod = cur.fetchone()
+            title = prod["title"] if prod else "your deal"
+            status_labels = {
+                "Shipped": ("🚚 Order Shipped!", f'Your order for "{title}" (#{order.get("order_number", order_id)}) has been shipped and is on its way.'),
+                "Delivered": ("📦 Order Delivered!", f'Your order for "{title}" (#{order.get("order_number", order_id)}) has been delivered. Enjoy!'),
+            }
+            if data.delivery_status in status_labels:
+                notif_title, notif_msg = status_labels[data.delivery_status]
+                create_notification(conn, order["user_id"], notif_title, notif_msg, "Order", order["deal_id"])
+
+                try:
+                    from backend.services.push_service import send_push, get_user_tokens
+                    tokens = get_user_tokens(conn, order["user_id"])
+                    if tokens:
+                        send_push(tokens, notif_title, notif_msg, {"type": "order", "order_id": order_id})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        conn.commit()
+        return {"message": f"Delivery status updated to {data.delivery_status}"}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _get_order_full(order_id: int, cur):
+    """Fetch a complete order with deal, product, and buyer info."""
+    cur.execute("""
+        SELECT
+            o.*,
+            d.price_per_unit, d.actual_price, d.target_quantity, d.current_quantity,
+            d.status AS deal_status, d.end_time, d.product_id, d.seller_id,
+            p.title AS product_title, p.image AS product_image, p.brand AS product_brand,
+            p.unit AS product_unit, p.category AS product_category,
+            u.name AS buyer_name, u.email AS buyer_email, u.mobile_number AS buyer_mobile
+        FROM orders o
+        JOIN deals d ON o.deal_id = d.id
+        JOIN products p ON d.product_id = p.id
+        JOIN users u ON o.user_id = u.id
+        WHERE o.id = %s
+    """, (order_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return dict(row)
+
+
+@router.get("/{order_id}/invoice")
+def download_invoice(order_id: int, user=Depends(required_user)):
+    """Download invoice PDF for an order. Consumer sees their own; supplier sees orders on their deals."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        row = _get_order_full(order_id, cur)
+        uid = int(user["sub"])
+        role = user.get("role")
+        if role == "consumer" and row["user_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if role == "supplier" and row["seller_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        for f in ["total_amount", "price_per_unit", "actual_price"]:
+            if row.get(f) is not None:
+                row[f] = float(row[f])
+
+        order = {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+        deal = {
+            "price_per_unit": row.get("price_per_unit"),
+            "actual_price": row.get("actual_price"),
+        }
+        product = {
+            "title": row.get("product_title"),
+            "brand": row.get("product_brand"),
+            "unit": row.get("product_unit"),
+            "category": row.get("product_category"),
+            "image": row.get("product_image"),
+        }
+        buyer = {
+            "name": row.get("buyer_name"),
+            "email": row.get("buyer_email"),
+            "mobile_number": row.get("buyer_mobile"),
+        }
+
+        pdf_bytes = generate_invoice(order, deal, product, buyer)
+        filename = f"Invoice_{row.get('order_number', order_id)}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/{order_id}/delivery-note")
+def download_delivery_note(order_id: int, user=Depends(required_user)):
+    """Download delivery note PDF. Consumer or supplier of the deal."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        row = _get_order_full(order_id, cur)
+        uid = int(user["sub"])
+        role = user.get("role")
+        if role == "consumer" and row["user_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if role == "supplier" and row["seller_id"] != uid:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        for f in ["total_amount", "price_per_unit", "actual_price"]:
+            if row.get(f) is not None:
+                row[f] = float(row[f])
+
+        order = {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+        deal = {
+            "price_per_unit": row.get("price_per_unit"),
+            "actual_price": row.get("actual_price"),
+        }
+        product = {
+            "title": row.get("product_title"),
+            "brand": row.get("product_brand"),
+            "unit": row.get("product_unit"),
+            "category": row.get("product_category"),
+        }
+        buyer = {
+            "name": row.get("buyer_name"),
+            "email": row.get("buyer_email"),
+            "mobile_number": row.get("buyer_mobile"),
+        }
+
+        pdf_bytes = generate_delivery_note(order, deal, product, buyer)
+        filename = f"DeliveryNote_{row.get('order_number', order_id)}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     finally:
         cur.close()
         conn.close()

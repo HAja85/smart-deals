@@ -151,6 +151,81 @@ def get_upcoming_deals():
         conn.close()
 
 
+@router.get("/trending")
+def get_trending_deals():
+    """Return top 10 Active deals by view count."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT * FROM deals WHERE status = 'Active' ORDER BY view_count DESC, id DESC LIMIT 10"
+        )
+        rows = cur.fetchall()
+        return [get_deal_with_product(cur, dict(r)) for r in rows]
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/{deal_id}/view")
+def increment_view(deal_id: int):
+    """Increment view count for a deal. No auth required."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE deals SET view_count = view_count + 1 WHERE id = %s RETURNING view_count",
+            (deal_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Deal not found")
+        conn.commit()
+        return {"view_count": row["view_count"]}
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/related/{deal_id}")
+def get_related_deals(deal_id: int):
+    """Return up to 8 Active deals sharing the same category or brand, excluding the source deal."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT d.product_id FROM deals d WHERE d.id = %s
+        """, (deal_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Deal not found")
+
+        cur.execute("""
+            SELECT category, brand FROM products WHERE id = %s
+        """, (row["product_id"],))
+        prod = cur.fetchone()
+        if not prod:
+            return []
+
+        category = prod["category"]
+        brand = prod["brand"]
+
+        cur.execute("""
+            SELECT d.* FROM deals d
+            JOIN products p ON d.product_id = p.id
+            WHERE d.status = 'Active'
+              AND d.id != %s
+              AND (p.category = %s OR p.brand = %s)
+            ORDER BY d.view_count DESC, d.id DESC
+            LIMIT 8
+        """, (deal_id, category, brand))
+        rows = cur.fetchall()
+        return [get_deal_with_product(cur, dict(r)) for r in rows]
+    finally:
+        cur.close()
+        conn.close()
+
+
 @router.get("/{deal_id}/orders")
 def get_deal_orders(deal_id: int, user=Depends(supplier_only)):
     conn = get_connection()

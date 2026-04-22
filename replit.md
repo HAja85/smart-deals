@@ -79,17 +79,44 @@ GET   /api/products/my-products  — Supplier's products (auth)
 POST  /api/products              — Create product (supplier only)
 DELETE /api/products/:id         — Delete product (supplier only)
 
-GET   /api/deals                 — All deals (?status=Active|Successful|Failed)
+GET   /api/deals                 — All deals (?status=Active|Successful|Failed&limit&offset)
 GET   /api/deals/my-deals        — Supplier's deals (auth)
+GET   /api/deals/trending        — Top 10 Active deals by view count
+GET   /api/deals/related/:id     — Up to 8 Active deals same category/brand
 GET   /api/deals/:id             — Deal detail
 POST  /api/deals                 — Create deal (supplier only)
+POST  /api/deals/:id/view        — Increment view count (no auth)
 
 POST  /api/orders                — Join a deal (consumer only)
 GET   /api/orders/my-orders      — Consumer's order history (auth)
+GET   /api/orders/supplier-orders— Supplier's orders with filters (auth)
+GET   /api/orders/:id/invoice    — Download invoice PDF (consumer or supplier)
+GET   /api/orders/:id/delivery-note — Download delivery note PDF (consumer or supplier)
+PATCH /api/orders/:id/delivery-status — Update delivery status (supplier only)
+
+GET   /api/cart                  — Consumer's cart (active deals only)
+POST  /api/cart                  — Add/update deal in cart
+PUT   /api/cart/:deal_id         — Update cart item quantity
+DELETE /api/cart/:deal_id        — Remove deal from cart
+DELETE /api/cart                 — Clear cart
+
+POST  /api/push/register         — Register Expo push token
+POST  /api/push/unregister       — Unregister push token
+
+GET   /api/reports/supplier?from=YYYY-MM-DD&to=YYYY-MM-DD — Accounting report PDF
 
 GET   /api/search?q=             — Search deals by name, category, brand
 GET   /api/latest-deals          — 6 most recent Active deals (home page)
+GET   /api/upcoming-deals        — 6 upcoming deals
 ```
+
+## Mobile App Backend Extensions (Task #1)
+
+- **cart_items** table: multi-deal shopping cart per consumer; expired deals auto-removed by scheduler
+- **push_tokens** table: stores Expo push tokens; push sent on deal success/fail/delivery updates
+- **PDF generation** (reportlab): Invoice, Delivery Note, Supplier Accounting Report
+- **view_count** column on deals: incremented on each detail view; powers trending endpoint
+- **Expo Push API**: used for push notifications (covers FCM + APNs natively)
 
 ## Business Logic
 
