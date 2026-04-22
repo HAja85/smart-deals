@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useColors } from '@/hooks/useColors';
 import { DealCard } from '@/components/DealCard';
 import { EmptyState, LoadingOverlay } from '@/components/ui';
+import { NotificationBadge } from '@/components/NotificationBadge';
 import type { Deal } from '@/types/models';
 
 const CATEGORIES = ['All', 'Rice', 'Oil', 'Dairy', 'Water', 'Snacks', 'Cleaning', 'Frozen'];
@@ -178,9 +179,11 @@ export default function ConsumerHome() {
             <Text style={s.greeting}>Good day,</Text>
             <Text style={s.userName}>{user?.name?.split(' ')[0] ?? 'Friend'}</Text>
           </View>
-          <TouchableOpacity style={s.notifBtn}>
-            <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+          <NotificationBadge show>
+            <TouchableOpacity style={s.notifBtn}>
+              <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </NotificationBadge>
         </View>
         <View style={s.searchBar}>
           <Ionicons name="search" size={18} color={colors.secondary} />

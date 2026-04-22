@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useColors } from '@/hooks/useColors';
+import { Avatar } from '@/components/Avatar';
 import type { Deal, Order } from '@/types/models';
 
 interface DealsResponse {
@@ -174,6 +175,12 @@ export default function SupplierHome() {
   return (
     <View style={s.container}>
       <View style={s.header}>
+        <Avatar
+          name={user?.name}
+          uri={user?.image}
+          size={52}
+          bgColor="rgba(255,255,255,0.25)"
+        />
         <Text style={s.greeting}>Supplier Portal</Text>
         <Text style={s.name}>{user?.name?.split(' ')[0] ?? 'Supplier'}</Text>
         <View style={s.roleBadge}>

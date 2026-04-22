@@ -15,14 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { EmptyState, ScreenHeader } from '@/components/ui';
+import { StatusBadge } from '@/components/Badge';
 import type { Order } from '@/types/models';
-
-const STATUS_COLORS: Record<Order['payment_status'], string> = {
-  Captured: '#10B981',
-  Cancelled: '#EF4444',
-  Pending: '#F59E0B',
-  Authorized: '#3B82F6',
-};
 
 const DELIVERY_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   Delivered: 'checkmark-circle',
@@ -32,7 +26,6 @@ const DELIVERY_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name
 
 function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
   const colors = useColors();
-  const statusColor = STATUS_COLORS[order.payment_status] ?? colors.secondary;
 
   const s = StyleSheet.create({
     card: {
@@ -56,17 +49,6 @@ function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
       fontSize: 13,
       fontFamily: 'Inter_600SemiBold',
       color: colors.primary,
-    },
-    statusBadge: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 20,
-      backgroundColor: statusColor + '20',
-    },
-    statusText: {
-      fontSize: 11,
-      fontFamily: 'Inter_600SemiBold',
-      color: statusColor,
     },
     title: {
       fontSize: 15,
@@ -94,9 +76,7 @@ function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
     <TouchableOpacity style={s.card} activeOpacity={0.85} onPress={onPress}>
       <View style={s.topRow}>
         <Text style={s.orderNum}>{order.order_number ?? `#${order.id}`}</Text>
-        <View style={s.statusBadge}>
-          <Text style={s.statusText}>{order.payment_status}</Text>
-        </View>
+        <StatusBadge status={order.payment_status} />
       </View>
       <Text style={s.title} numberOfLines={1}>
         {order.product_title ?? 'Order'}

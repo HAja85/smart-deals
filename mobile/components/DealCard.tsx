@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import { Badge } from '@/components/Badge';
 import type { Deal } from '@/types/models';
 
 interface DealCardProps {
@@ -148,15 +149,10 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
           )}
           <View style={s.badgeRow}>
             {isHot && (
-              <View style={[s.badge, { backgroundColor: colors.hot }]}>
-                <Ionicons name="flame" size={8} color="#FFF" />
-                <Text style={s.badgeText}>HOT</Text>
-              </View>
+              <Badge label="HOT" variant="hot" icon="flame" size="xs" />
             )}
             {isAlmostFull && !isHot && (
-              <View style={[s.badge, { backgroundColor: colors.almostFull }]}>
-                <Text style={s.badgeText}>ALMOST FULL</Text>
-              </View>
+              <Badge label="ALMOST FULL" variant="warning" size="xs" filled />
             )}
           </View>
         </View>
@@ -306,20 +302,23 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
           {(isHot || isAlmostFull || showStatus) && (
             <View style={s.badgeRow}>
               {isHot && (
-                <View style={[s.badge, { backgroundColor: colors.hot }]}>
-                  <Ionicons name="flame" size={10} color="#FFF" />
-                  <Text style={s.badgeText}>HOT</Text>
-                </View>
+                <Badge label="HOT" variant="hot" icon="flame" size="xs" />
               )}
               {isAlmostFull && !isHot && (
-                <View style={[s.badge, { backgroundColor: colors.almostFull }]}>
-                  <Text style={s.badgeText}>ALMOST FULL</Text>
-                </View>
+                <Badge label="ALMOST FULL" variant="warning" size="xs" filled />
               )}
               {showStatus && (
-                <View style={s.statusDot}>
-                  <Text style={s.statusText}>{deal.status}</Text>
-                </View>
+                <Badge
+                  label={deal.status}
+                  variant={
+                    deal.status === 'Active'
+                      ? 'primary'
+                      : deal.status === 'Successful'
+                      ? 'success'
+                      : 'error'
+                  }
+                  size="xs"
+                />
               )}
             </View>
           )}
