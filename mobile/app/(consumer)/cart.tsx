@@ -249,6 +249,7 @@ export default function CartScreen() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [removedCount, setRemovedCount] = useState(0);
   const prevItemIds = useRef<Set<number>>(new Set());
+  const prevExpiredIds = useRef<Set<number>>(new Set());
 
   const { data: cartData, isLoading, refetch, isRefetching } = useQuery<CartResponse>({
     queryKey: ['/api/cart'],
@@ -261,14 +262,16 @@ export default function CartScreen() {
 
   useEffect(() => {
     if (!cartData) return;
-    const now = Date.now();
     const currentIds = new Set(cartData.items.map((i) => i.deal_id));
-    const serverRemovedCount = [...prevItemIds.current].filter((id) => !currentIds.has(id)).length;
-    const dropped = serverRemovedCount;
-    if (prevItemIds.current.size > 0 && dropped > 0) {
-      setRemovedCount((c) => c + dropped);
+    // Only count items that previously had is_expired=true and have now disappeared
+    const expiredAutoRemoved = [...prevExpiredIds.current].filter((id) => !currentIds.has(id)).length;
+    if (prevItemIds.current.size > 0 && expiredAutoRemoved > 0) {
+      setRemovedCount((c) => c + expiredAutoRemoved);
     }
     prevItemIds.current = currentIds;
+    prevExpiredIds.current = new Set(
+      cartData.items.filter((i) => i.is_expired === true).map((i) => i.deal_id)
+    );
   }, [cartData]);
 
   useFocusEffect(useCallback(() => {
