@@ -510,6 +510,8 @@ def download_invoice(order_id: int, user=Depends(required_user)):
         row = _get_order_full(order_id, cur)
         uid = int(user["sub"])
         role = user.get("role")
+        if role not in {"consumer", "supplier"}:
+            raise HTTPException(status_code=403, detail="Access denied")
         if role == "consumer" and row["user_id"] != uid:
             raise HTTPException(status_code=403, detail="Access denied")
         if role == "supplier" and row["seller_id"] != uid:
@@ -558,6 +560,8 @@ def download_delivery_note(order_id: int, user=Depends(required_user)):
         row = _get_order_full(order_id, cur)
         uid = int(user["sub"])
         role = user.get("role")
+        if role not in {"consumer", "supplier"}:
+            raise HTTPException(status_code=403, detail="Access denied")
         if role == "consumer" and row["user_id"] != uid:
             raise HTTPException(status_code=403, detail="Access denied")
         if role == "supplier" and row["seller_id"] != uid:
