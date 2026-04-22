@@ -206,7 +206,9 @@ export default function ProfileScreen() {
         });
         const imageUrl = uploadRes.data?.url;
         if (imageUrl) {
-          await api.put('/auth/me', { image: imageUrl });
+          const apiBase = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000/api').replace('/api', '');
+          const absoluteUrl = imageUrl.startsWith('/') ? `${apiBase}${imageUrl}` : imageUrl;
+          await api.put('/auth/me', { image: absoluteUrl });
         }
         await refreshUser?.();
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

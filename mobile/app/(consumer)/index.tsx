@@ -169,6 +169,20 @@ export default function ConsumerHome() {
     upcomingPrice: { fontSize: 15, fontFamily: 'Inter_700Bold', color: colors.primary },
     upcomingMeta: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.secondary, marginTop: 4 },
     bottomPad: { height: Platform.OS === 'web' ? 34 : insets.bottom + 16 },
+    viewBadge: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      zIndex: 10,
+    },
+    viewBadgeText: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
   });
 
   return (
@@ -332,11 +346,18 @@ export default function ConsumerHome() {
           ) : (
             <View style={s.trendingList}>
               {trendingDeals.slice(0, 5).map((deal) => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
-                  onPress={() => router.push(`/deal/${deal.id}` as Href)}
-                />
+                <View key={deal.id} style={{ position: 'relative' }}>
+                  <DealCard
+                    deal={deal}
+                    onPress={() => router.push(`/deal/${deal.id}` as Href)}
+                  />
+                  {(deal.view_count ?? 0) > 0 && (
+                    <View style={s.viewBadge} pointerEvents="none">
+                      <Ionicons name="eye-outline" size={10} color="#fff" />
+                      <Text style={s.viewBadgeText}>{deal.view_count}</Text>
+                    </View>
+                  )}
+                </View>
               ))}
             </View>
           )}
