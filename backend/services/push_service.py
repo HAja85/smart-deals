@@ -28,7 +28,7 @@ def send_push(tokens: list[str], title: str, body: str, data: dict = None):
             "priority": "high",
         }
         for token in tokens
-        if token and token.startswith("ExponentPushToken[")
+        if token and (token.startswith("ExponentPushToken[") or token.startswith("ExpoPushToken["))
     ]
 
     if not messages:

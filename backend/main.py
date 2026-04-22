@@ -129,8 +129,8 @@ def check_deal_statuses():
                         supplier_tokens = get_users_tokens(conn, [deal["seller_id"]])
                         send_push(supplier_tokens, "✅ Deal Successful!", f'"{product_title}" reached its target.',
                                   {"type": "deal", "deal_id": deal["id"]})
-                    except Exception:
-                        pass
+                    except Exception as push_err:
+                        print(f"[scheduler] Push dispatch failed for deal {deal['id']} (success): {push_err}")
                     cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
                 else:
                     cur.execute("UPDATE deals SET status = 'Failed' WHERE id = %s", (deal["id"],))
@@ -166,8 +166,8 @@ def check_deal_statuses():
                         supplier_tokens = get_users_tokens(conn, [deal["seller_id"]])
                         send_push(supplier_tokens, "❌ Deal Failed", f'"{product_title}" expired without reaching the target.',
                                   {"type": "deal", "deal_id": deal["id"]})
-                    except Exception:
-                        pass
+                    except Exception as push_err:
+                        print(f"[scheduler] Push dispatch failed for deal {deal['id']} (failed): {push_err}")
                     cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
 
         cur.execute("""
