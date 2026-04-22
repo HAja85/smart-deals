@@ -95,7 +95,7 @@ const MyOrders = () => {
     user.getIdToken().then(token =>
       fetch("/api/orders/my-orders", { headers: { authorization: `Bearer ${token}` } })
         .then(r => r.json())
-        .then(setOrders)
+        .then(data => setOrders(Array.isArray(data) ? data : (data.items ?? [])))
         .catch(() => setOrders([]))
         .finally(() => setLoading(false))
     );

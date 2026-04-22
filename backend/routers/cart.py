@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from backend.database import get_connection
 from backend.auth import decode_token
-from backend.services.payment_service import create_cart_payment_intent
+from backend.services.payment_service import create_cart_payment_intent, verify_payment_authorized, cancel_payment
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 security = HTTPBearer()
@@ -286,7 +286,7 @@ def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
 
 @router.post("/confirm-checkout")
 def confirm_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
-    """Mark all given orders as Authorized after successful Stripe client-side confirmation."""
+    """Mark orders as Authorized after verifying Stripe PaymentIntent status server-side."""
     if not data.order_ids:
         raise HTTPException(status_code=400, detail="No order IDs provided")
     conn = get_connection()
@@ -295,6 +295,28 @@ def confirm_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
     try:
         user_id = int(user["sub"])
         placeholders = ",".join(["%s"] * len(data.order_ids))
+        cur.execute(
+            f"""SELECT id, stripe_payment_intent_id, payment_status
+                FROM orders
+                WHERE id IN ({placeholders}) AND user_id = %s""",
+            data.order_ids + [user_id],
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        if len(rows) != len(data.order_ids):
+            raise HTTPException(status_code=403, detail="One or more orders not found for this user")
+
+        pi_ids = {r["stripe_payment_intent_id"] for r in rows if r.get("stripe_payment_intent_id")}
+        if not pi_ids:
+            raise HTTPException(status_code=400, detail="No Stripe payment intent found for these orders")
+
+        for pi_id in pi_ids:
+            is_ok, err_msg = verify_payment_authorized(pi_id, user_id)
+            if not is_ok:
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Payment not verified: {err_msg}. Please complete your payment."
+                )
+
         cur.execute(
             f"""UPDATE orders
                SET payment_status = 'Authorized', paid_at = NOW()
@@ -305,6 +327,60 @@ def confirm_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
         updated_ids = [dict(r)["id"] for r in cur.fetchall()]
         conn.commit()
         return {"confirmed_order_ids": updated_ids, "count": len(updated_ids)}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/cancel-checkout")
+def cancel_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
+    """Cancel pending orders (payment failed), cancel Stripe PI, and restore cart items."""
+    if not data.order_ids:
+        raise HTTPException(status_code=400, detail="No order IDs provided")
+    conn = get_connection()
+    conn.autocommit = False
+    cur = conn.cursor()
+    try:
+        user_id = int(user["sub"])
+        placeholders = ",".join(["%s"] * len(data.order_ids))
+        cur.execute(
+            f"""SELECT id, deal_id, quantity, stripe_payment_intent_id, payment_status
+                FROM orders
+                WHERE id IN ({placeholders}) AND user_id = %s AND payment_status = 'Pending'""",
+            data.order_ids + [user_id],
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+        pi_ids = {r["stripe_payment_intent_id"] for r in rows if r.get("stripe_payment_intent_id")}
+        for pi_id in pi_ids:
+            cancel_payment(pi_id)
+
+        if rows:
+            order_ids_to_cancel = [r["id"] for r in rows]
+            cancel_ph = ",".join(["%s"] * len(order_ids_to_cancel))
+            cur.execute(
+                f"UPDATE orders SET payment_status = 'Cancelled' WHERE id IN ({cancel_ph})",
+                order_ids_to_cancel,
+            )
+            for r in rows:
+                cur.execute(
+                    "UPDATE deals SET current_quantity = GREATEST(0, current_quantity - %s) WHERE id = %s",
+                    (r["quantity"], r["deal_id"]),
+                )
+                cur.execute("""
+                    INSERT INTO cart_items (user_id, deal_id, quantity)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (user_id, deal_id) DO UPDATE SET quantity = EXCLUDED.quantity, added_at = NOW()
+                """, (user_id, r["deal_id"], r["quantity"]))
+
+        conn.commit()
+        return {"message": "Checkout cancelled and cart restored", "cancelled": len(rows)}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))

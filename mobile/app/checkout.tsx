@@ -134,13 +134,21 @@ export default function CheckoutScreen() {
           paymentMethodType: 'Card',
         });
         if (error) {
+          await api.post('/cart/cancel-checkout', { order_ids }).catch(() => {});
+          queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
           setIsPlacingOrder(false);
-          Alert.alert('Payment Failed', error.message);
+          Alert.alert(
+            'Payment Failed',
+            error.message + '\n\nYour cart has been restored — please try again.'
+          );
           return;
         }
       }
 
-      await api.post('/cart/confirm-checkout', { order_ids }).catch(() => {});
+      const confirmRes = await api.post('/cart/confirm-checkout', { order_ids });
+      if (!confirmRes.data?.confirmed_order_ids?.length) {
+        throw new Error('Payment verification failed. Please contact support.');
+      }
 
       queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-orders'] });

@@ -36,6 +36,24 @@ def create_payment_intent(order_id: int, amount_kwd: float, currency: str = "usd
     return {"client_secret": intent.client_secret, "payment_intent_id": intent.id}
 
 
+def verify_payment_authorized(payment_intent_id: str, expected_user_id: int) -> tuple:
+    """
+    Verify that a PaymentIntent has been confirmed by the client and is
+    awaiting capture ('requires_capture'). Optionally validates metadata.
+    Returns (is_authorized: bool, error_message: str | None).
+    """
+    try:
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        if intent.status != "requires_capture":
+            return (False, f"Payment not confirmed. Status: {intent.status}")
+        meta_user_id = intent.metadata.get("user_id", "")
+        if meta_user_id and str(expected_user_id) != meta_user_id:
+            return (False, "Payment intent does not belong to this user")
+        return (True, None)
+    except stripe.StripeError as e:
+        return (False, str(e))
+
+
 def capture_payment(payment_intent_id: str) -> bool:
     try:
         intent = stripe.PaymentIntent.retrieve(payment_intent_id)
