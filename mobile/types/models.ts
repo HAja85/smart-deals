@@ -7,9 +7,22 @@ export interface User {
   image?: string;
 }
 
+export interface ProductInDeal {
+  id: number;
+  title: string;
+  image?: string;
+  brand: string;
+  unit: string;
+  category: string;
+  description?: string;
+  seller_name?: string;
+  seller_image?: string;
+}
+
 export interface Deal {
   id: number;
   product_id?: number;
+  product?: ProductInDeal;
   product_title?: string;
   product_brand?: string;
   product_image?: string;
@@ -18,9 +31,11 @@ export interface Deal {
   image?: string;
   price_per_unit: number;
   actual_price?: number;
+  discount_percent?: number;
   target_quantity: number;
   current_quantity: number;
-  status: 'Active' | 'Successful' | 'Failed';
+  progress_percent?: number;
+  status: 'Active' | 'Successful' | 'Failed' | 'Upcoming' | 'Stopped';
   start_time?: string;
   end_time?: string;
   view_count?: number;
@@ -33,24 +48,47 @@ export interface Order {
   deal_id?: number;
   user_id?: number;
   product_title?: string;
+  product_image?: string;
+  product_brand?: string;
+  product_unit?: string;
   quantity: number;
   total_amount: number;
+  price_per_unit?: number;
+  actual_price?: number;
   payment_status: 'Pending' | 'Captured' | 'Cancelled' | 'Authorized';
   delivery_status?: 'Pending' | 'Shipped' | 'Delivered';
+  delivery_address?: string;
+  mobile_number?: string;
   created_at: string;
+  paid_at?: string;
+  stripe_client_secret?: string;
+  stripe_payment_intent_id?: string;
+  deal_status?: string;
   buyer_name?: string;
+  buyer_email?: string;
+  buyer_mobile?: string;
 }
 
 export interface CartItem {
+  cart_item_id?: number;
   deal_id: number;
-  product_title?: string;
-  product_brand?: string;
-  price_per_unit: number;
   quantity: number;
+  price_per_unit: number;
+  actual_price?: number;
+  product_title?: string;
+  product_image?: string;
+  product_brand?: string;
+  product_unit?: string;
+  deal_status?: string;
+  end_time?: string;
+  line_total?: number;
+  discount_percent?: number;
+  progress_percent?: number;
 }
 
-export interface Cart {
+export interface CartResponse {
   items: CartItem[];
+  item_count: number;
   cart_total: number;
 }
 

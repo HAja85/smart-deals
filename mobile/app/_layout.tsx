@@ -109,6 +109,10 @@ function AuthGate() {
           headerTitleStyle: { fontFamily: 'Inter_600SemiBold' },
         }}
       />
+      <Stack.Screen
+        name="checkout"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }
