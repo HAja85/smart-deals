@@ -76,9 +76,9 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
   const savings = actualPrice - pricePerUnit;
   const savingsPct = actualPrice > 0 ? Math.round((savings / actualPrice) * 100) : 0;
 
-  const title = deal.product_title ?? deal.title ?? 'Deal';
-  const brand = deal.product_brand ?? deal.brand ?? '';
-  const image = deal.product_image ?? deal.image ?? null;
+  const title = deal.product?.title ?? deal.product_title ?? deal.title ?? 'Deal';
+  const brand = deal.product?.brand ?? deal.product_brand ?? deal.brand ?? '';
+  const image = deal.product?.image ?? deal.product_image ?? deal.image ?? null;
   const statusColor = STATUS_COLORS[deal.status] ?? colors.secondary;
 
   const progressColor = isHot ? colors.hot : isAlmostFull ? colors.almostFull : colors.primary;
