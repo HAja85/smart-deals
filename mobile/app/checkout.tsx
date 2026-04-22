@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { api } from '@/services/api';
@@ -18,6 +18,34 @@ import { useColors } from '@/hooks/useColors';
 import { InputField, PrimaryButton } from '@/components/ui';
 import type { CartItem, CartResponse, Order } from '@/types/models';
 import { getApiError } from '@/types/models';
+
+let CardField: React.ComponentType<{
+  onCardChange?: (cardDetails: { complete: boolean }) => void;
+  style?: object;
+  cardStyle?: object;
+}> | null = null;
+
+let useConfirmPayment: (() => {
+  confirmPayment: (clientSecret: string, data: { paymentMethodType: string }) => Promise<{ paymentIntent?: unknown; error?: { message: string } }>;
+}) | null = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    const stripe = require('@stripe/stripe-react-native');
+    CardField = stripe.CardField;
+    useConfirmPayment = stripe.useConfirmPayment;
+  } catch {
+  }
+}
+
+function useStripeConfirm() {
+  if (useConfirmPayment) {
+    return useConfirmPayment();
+  }
+  return {
+    confirmPayment: async (_cs: string, _data: unknown) => ({ paymentIntent: null, error: null }),
+  };
+}
 
 export default function CheckoutScreen() {
   const colors = useColors();
@@ -28,10 +56,14 @@ export default function CheckoutScreen() {
   const [step, setStep] = useState<1 | 2>(1);
   const [address, setAddress] = useState('');
   const [mobile, setMobile] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvc, setCardCvc] = useState('');
+  const [cardComplete, setCardComplete] = useState(false);
+  const [webCardNumber, setWebCardNumber] = useState('');
+  const [webCardExpiry, setWebCardExpiry] = useState('');
+  const [webCardCvc, setWebCardCvc] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+
+  const { confirmPayment } = useStripeConfirm();
 
   const { data: cartData } = useQuery<CartResponse>({
     queryKey: ['/api/cart'],
@@ -44,41 +76,6 @@ export default function CheckoutScreen() {
   const items: CartItem[] = cartData?.items ?? [];
   const total = Number(cartData?.cart_total ?? 0);
 
-  const placeOrderMutation = useMutation({
-    mutationFn: async () => {
-      const orderPromises = items.map((item) =>
-        api.post<Order>('/orders', {
-          deal_id: item.deal_id,
-          quantity: item.quantity,
-          delivery_address: address.trim(),
-          mobile_number: mobile.trim(),
-        })
-      );
-      const orders = await Promise.all(orderPromises);
-      for (const res of orders) {
-        if (res.data.id) {
-          await api.post(`/orders/${res.data.id}/confirm-payment`).catch(() => {});
-        }
-      }
-      return orders.map((r) => r.data);
-    },
-    onSuccess: async (orders) => {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await api.delete('/cart').catch(() => {});
-      queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/orders/my-orders'] });
-      const firstOrder = orders[0];
-      if (firstOrder?.id) {
-        router.replace(`/order/${firstOrder.id}` as Href);
-      } else {
-        router.replace('/(consumer)/orders' as Href);
-      }
-    },
-    onError: (err: unknown) => {
-      Alert.alert('Order Failed', getApiError(err, 'Failed to place order. Please try again.'));
-    },
-  });
-
   const validateStep1 = () => {
     const e: Record<string, string> = {};
     if (!address.trim()) e.address = 'Delivery address is required';
@@ -89,31 +86,73 @@ export default function CheckoutScreen() {
   };
 
   const validateStep2 = () => {
+    if (Platform.OS !== 'web' && CardField) {
+      if (!cardComplete) {
+        setErrors({ card: 'Please complete your card details' });
+        return false;
+      }
+      return true;
+    }
     const e: Record<string, string> = {};
-    const num = cardNumber.replace(/\s/g, '');
+    const num = webCardNumber.replace(/\s/g, '');
     if (num.length < 14) e.cardNumber = 'Enter a valid card number';
-    if (!cardExpiry.match(/^\d{2}\/\d{2}$/)) e.cardExpiry = 'Enter expiry as MM/YY';
-    if (cardCvc.length < 3) e.cardCvc = 'Enter a valid CVC';
+    if (!webCardExpiry.match(/^\d{2}\/\d{2}$/)) e.cardExpiry = 'Enter expiry as MM/YY';
+    if (webCardCvc.length < 3) e.cardCvc = 'Enter a valid CVC';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleNext = () => {
-    if (validateStep1()) {
-      setStep(2);
-    }
-  };
-
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!validateStep2()) return;
-    Alert.alert(
-      'Confirm Order',
-      `Place order for KWD ${total.toFixed(3)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Place Order', onPress: () => placeOrderMutation.mutate() },
-      ]
-    );
+    setIsPlacingOrder(true);
+
+    try {
+      const orderResponses: Order[] = [];
+      for (const item of items) {
+        const res = await api.post<Order>('/orders', {
+          deal_id: item.deal_id,
+          quantity: item.quantity,
+          delivery_address: address.trim(),
+          mobile_number: mobile.trim(),
+        });
+        orderResponses.push(res.data);
+      }
+
+      const firstOrder = orderResponses[0];
+      const clientSecret = firstOrder?.stripe_client_secret;
+
+      if (clientSecret && Platform.OS !== 'web' && CardField) {
+        const { error } = await confirmPayment(clientSecret, {
+          paymentMethodType: 'Card',
+        });
+        if (error) {
+          setIsPlacingOrder(false);
+          Alert.alert('Payment Failed', error.message);
+          return;
+        }
+      }
+
+      for (const order of orderResponses) {
+        if (order.id) {
+          await api.post(`/orders/${order.id}/confirm-payment`).catch(() => {});
+        }
+      }
+
+      await api.delete('/cart').catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/orders/my-orders'] });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      if (firstOrder?.id) {
+        router.replace(`/order/${firstOrder.id}` as Href);
+      } else {
+        router.replace('/(consumer)/orders' as Href);
+      }
+    } catch (err: unknown) {
+      Alert.alert('Order Failed', getApiError(err, 'Failed to place order. Please try again.'));
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   const formatCardNumber = (text: string) => {
@@ -157,14 +196,6 @@ export default function CheckoutScreen() {
       padding: 16,
       marginBottom: 16,
     },
-    sectionTitle: {
-      fontSize: 15,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-      marginBottom: 14,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
     sectionTitleText: {
       fontSize: 15,
       fontFamily: 'Inter_700Bold',
@@ -187,22 +218,19 @@ export default function CheckoutScreen() {
     },
     totalLabel: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground },
     totalAmount: { fontSize: 18, fontFamily: 'Inter_700Bold', color: colors.primary },
-    cardIconRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 14,
+    nativeCardField: {
+      width: '100%',
+      height: 50,
+      marginBottom: 16,
     },
-    cardIcon: {
-      width: 40,
-      height: 26,
-      borderRadius: 4,
-      backgroundColor: colors.muted,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
+    cardFieldWrap: {
+      borderWidth: 1.5,
+      borderColor: errors.card ? colors.error : colors.border,
+      borderRadius: 10,
+      overflow: 'hidden',
+      marginBottom: 4,
     },
-    cardIconText: { fontSize: 9, fontFamily: 'Inter_700Bold', color: colors.secondary },
+    cardError: { fontSize: 12, color: colors.error, marginBottom: 12, fontFamily: 'Inter_400Regular' },
     row2: { flexDirection: 'row', gap: 12 },
     demoNote: {
       backgroundColor: '#EFF6FF',
@@ -291,7 +319,7 @@ export default function CheckoutScreen() {
               keyboardType="phone-pad"
               error={errors.mobile}
             />
-            <PrimaryButton label="Continue to Payment" onPress={handleNext} />
+            <PrimaryButton label="Continue to Payment" onPress={() => { if (validateStep1()) setStep(2); }} />
           </View>
         )}
 
@@ -299,62 +327,78 @@ export default function CheckoutScreen() {
           <View style={s.section}>
             <Text style={s.sectionTitleText}>Card Details</Text>
 
-            <View style={s.cardIconRow}>
-              <View style={s.cardIcon}><Text style={s.cardIconText}>VISA</Text></View>
-              <View style={s.cardIcon}><Text style={s.cardIconText}>MC</Text></View>
-              <View style={s.cardIcon}><Text style={s.cardIconText}>AMEX</Text></View>
-            </View>
-
-            <View style={s.demoNote}>
-              <Text style={s.demoNoteText}>
-                Demo mode: Use card 4242 4242 4242 4242, any future expiry, any 3-digit CVC.
-              </Text>
-            </View>
-
-            <InputField
-              label="Card Number"
-              value={cardNumber}
-              onChangeText={(t) => setCardNumber(formatCardNumber(t))}
-              placeholder="4242 4242 4242 4242"
-              keyboardType="number-pad"
-              maxLength={19}
-              error={errors.cardNumber}
-            />
-            <View style={s.row2}>
-              <View style={{ flex: 1 }}>
+            {Platform.OS !== 'web' && CardField ? (
+              <>
+                <View style={s.cardFieldWrap}>
+                  <CardField
+                    onCardChange={(cardDetails) => {
+                      setCardComplete(cardDetails.complete);
+                      if (errors.card) setErrors({});
+                    }}
+                    style={s.nativeCardField}
+                    cardStyle={{
+                      backgroundColor: colors.surface,
+                      textColor: colors.foreground,
+                      placeholderColor: colors.secondary,
+                    }}
+                  />
+                </View>
+                {errors.card ? <Text style={s.cardError}>{errors.card}</Text> : null}
+              </>
+            ) : (
+              <>
+                <View style={s.demoNote}>
+                  <Text style={s.demoNoteText}>
+                    Demo: Use card 4242 4242 4242 4242, any future expiry, any 3-digit CVC.
+                  </Text>
+                </View>
                 <InputField
-                  label="Expiry (MM/YY)"
-                  value={cardExpiry}
-                  onChangeText={(t) => setCardExpiry(formatExpiry(t))}
-                  placeholder="12/26"
+                  label="Card Number"
+                  value={webCardNumber}
+                  onChangeText={(t) => setWebCardNumber(formatCardNumber(t))}
+                  placeholder="4242 4242 4242 4242"
                   keyboardType="number-pad"
-                  maxLength={5}
-                  error={errors.cardExpiry}
+                  maxLength={19}
+                  error={errors.cardNumber}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <InputField
-                  label="CVC"
-                  value={cardCvc}
-                  onChangeText={(t) => setCardCvc(t.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="123"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  secureTextEntry
-                  error={errors.cardCvc}
-                />
-              </View>
-            </View>
+                <View style={s.row2}>
+                  <View style={{ flex: 1 }}>
+                    <InputField
+                      label="Expiry (MM/YY)"
+                      value={webCardExpiry}
+                      onChangeText={(t) => setWebCardExpiry(formatExpiry(t))}
+                      placeholder="12/26"
+                      keyboardType="number-pad"
+                      maxLength={5}
+                      error={errors.cardExpiry}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <InputField
+                      label="CVC"
+                      value={webCardCvc}
+                      onChangeText={(t) => setWebCardCvc(t.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="123"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      secureTextEntry
+                      error={errors.cardCvc}
+                    />
+                  </View>
+                </View>
+              </>
+            )}
 
             <PrimaryButton
               label={`Place Order — KWD ${total.toFixed(3)}`}
               onPress={handlePlaceOrder}
-              loading={placeOrderMutation.isPending}
+              loading={isPlacingOrder}
+              style={{ marginTop: 4 }}
             />
 
             <View style={s.lockRow}>
               <Ionicons name="lock-closed" size={12} color={colors.secondary} />
-              <Text style={s.lockText}>Secured with 256-bit SSL encryption</Text>
+              <Text style={s.lockText}>Secured with Stripe 256-bit SSL encryption</Text>
             </View>
           </View>
         )}

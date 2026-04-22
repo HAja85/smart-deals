@@ -38,6 +38,13 @@
           "color": "#34699A",
           "sounds": []
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.smartdeals.kuwait",
+          "enableGooglePay": false
+        }
       ]
     ],
     "extra": {

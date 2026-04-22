@@ -184,12 +184,41 @@ function CartItemRow({
   );
 }
 
+function ExpiredItemsBanner({ count, onDismiss }: { count: number; onDismiss: () => void }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const t = setTimeout(() => {
+      Animated.timing(opacity, { toValue: 0, duration: 600, useNativeDriver: true }).start(onDismiss);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <Animated.View style={{ opacity, marginBottom: 12 }}>
+      <View style={{
+        backgroundColor: '#FEF2F2', borderRadius: 10, padding: 12,
+        borderLeftWidth: 4, borderLeftColor: '#EF4444',
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+      }}>
+        <Ionicons name="alert-circle" size={18} color="#EF4444" />
+        <Text style={{ fontSize: 13, fontFamily: 'Inter_500Medium', color: '#DC2626', flex: 1 }}>
+          {count} expired deal{count > 1 ? 's were' : ' was'} automatically removed from your cart.
+        </Text>
+        <TouchableOpacity onPress={onDismiss}>
+          <Ionicons name="close" size={16} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function CartScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [removedCount, setRemovedCount] = useState(0);
+  const prevItemIds = useRef<Set<number>>(new Set());
 
   const { data: cartData, isLoading, refetch, isRefetching } = useQuery<CartResponse>({
     queryKey: ['/api/cart'],
@@ -197,8 +226,24 @@ export default function CartScreen() {
       const res = await api.get<CartResponse>('/cart');
       return res.data;
     },
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (!cartData) return;
+    const now = Date.now();
+    const currentIds = new Set(cartData.items.map((i) => i.deal_id));
+    const serverRemovedCount = [...prevItemIds.current].filter((id) => !currentIds.has(id)).length;
+    const clientExpiredCount = cartData.items.filter((item) => {
+      if (!item.end_time) return false;
+      return new Date(item.end_time).getTime() < now;
+    }).length;
+    const dropped = serverRemovedCount + clientExpiredCount;
+    if (prevItemIds.current.size > 0 && dropped > 0) {
+      setRemovedCount(dropped);
+    }
+    prevItemIds.current = currentIds;
+  }, [cartData]);
 
   useFocusEffect(useCallback(() => {
     refetch();
@@ -307,6 +352,11 @@ export default function CartScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={colors.primary} />
+        }
+        ListHeaderComponent={
+          removedCount > 0 ? (
+            <ExpiredItemsBanner count={removedCount} onDismiss={() => setRemovedCount(0)} />
+          ) : null
         }
         ListEmptyComponent={
           isLoading ? null : (

@@ -110,7 +110,7 @@ function EditProfileModal({
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await api.put('/users/me', { name: name.trim(), mobile_number: mobile.trim() });
+      await api.put('/auth/me', { name: name.trim(), mobile_number: mobile.trim() });
       await refreshUser?.();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
@@ -157,17 +157,20 @@ export default function ProfileScreen() {
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
-  const { data: orders } = useQuery<Order[]>({
-    queryKey: ['/api/orders/my-orders'],
+  const { data: ordersData } = useQuery<{ items: Order[]; total: number }>({
+    queryKey: ['/api/orders/my-orders', 'profile-stats'],
     queryFn: async () => {
-      const res = await api.get<Order[]>('/orders/my-orders');
+      const res = await api.get<{ items: Order[]; total: number }>('/orders/my-orders', {
+        params: { limit: 100, offset: 0 },
+      });
       return res.data;
     },
   });
 
-  const totalOrders = orders?.length ?? 0;
-  const totalSpent = orders?.reduce((sum, o) => sum + Number(o.total_amount), 0) ?? 0;
-  const activeDeals = orders?.filter((o) => o.payment_status === 'Authorized' || o.payment_status === 'Pending').length ?? 0;
+  const orders = ordersData?.items ?? [];
+  const totalOrders = ordersData?.total ?? 0;
+  const totalSpent = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const activeDeals = orders.filter((o) => o.payment_status === 'Authorized' || o.payment_status === 'Pending').length;
 
   const handlePickImage = async () => {
     if (Platform.OS === 'web') {
@@ -192,9 +195,13 @@ export default function ProfileScreen() {
         const uri = asset.uri;
         const ext = uri.split('.').pop() ?? 'jpg';
         form.append('file', { uri, name: `avatar.${ext}`, type: `image/${ext}` } as unknown as Blob);
-        await api.post('/users/me/avatar', form, {
+        const uploadRes = await api.post<{ url: string }>('/upload', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+        const imageUrl = uploadRes.data?.url;
+        if (imageUrl) {
+          await api.put('/auth/me', { image: imageUrl });
+        }
         await refreshUser?.();
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (err: unknown) {

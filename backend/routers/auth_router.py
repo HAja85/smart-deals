@@ -212,3 +212,45 @@ def get_me(payload: dict = Depends(get_current_user)):
     finally:
         cur.close()
         conn.close()
+
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    image: Optional[str] = None
+
+
+@router.put("/me")
+def update_me(req: UpdateProfileRequest, payload: dict = Depends(get_current_user)):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        user_id = int(payload["sub"])
+        updates = []
+        values = []
+        if req.name is not None and req.name.strip():
+            updates.append("name = %s")
+            values.append(req.name.strip())
+        if req.mobile_number is not None:
+            updates.append("mobile_number = %s")
+            values.append(req.mobile_number.strip())
+        if req.image is not None:
+            updates.append("image = %s")
+            values.append(req.image)
+        if not updates:
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            user = cur.fetchone()
+            return format_user(dict(user))
+        values.append(user_id)
+        cur.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING *",
+            values
+        )
+        updated = cur.fetchone()
+        if not updated:
+            raise HTTPException(status_code=404, detail="User not found")
+        conn.commit()
+        return format_user(dict(updated))
+    finally:
+        cur.close()
+        conn.close()

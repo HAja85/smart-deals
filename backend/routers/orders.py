@@ -603,11 +603,31 @@ def download_delivery_note(order_id: int, user=Depends(required_user)):
 
 
 @router.get("/my-orders")
-def get_my_orders(user=Depends(required_user)):
+def get_my_orders(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = Query(None),
+    user=Depends(required_user),
+):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        user_id = int(user["sub"])
+        base_where = "WHERE o.user_id = %s"
+        params: list = [user_id]
+        if status and status != "All":
+            base_where += " AND o.payment_status = %s"
+            params.append(status)
+
+        cur.execute(f"""
+            SELECT COUNT(*) as total FROM orders o WHERE o.user_id = %s
+            {("AND o.payment_status = %s" if status and status != "All" else "")}
+        """, params[:])
+
+        total_row = cur.fetchone()
+        total = dict(total_row)["total"] if total_row else 0
+
+        cur.execute(f"""
             SELECT o.*,
                    d.price_per_unit, d.actual_price, d.target_quantity, d.current_quantity, d.status as deal_status,
                    d.end_time, d.product_id,
@@ -616,9 +636,11 @@ def get_my_orders(user=Depends(required_user)):
             FROM orders o
             JOIN deals d ON o.deal_id = d.id
             JOIN products p ON d.product_id = p.id
-            WHERE o.user_id = %s
+            {base_where}
             ORDER BY o.id DESC
-        """, (int(user["sub"]),))
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
+
         rows = cur.fetchall()
         result = []
         for r in rows:
@@ -631,7 +653,11 @@ def get_my_orders(user=Depends(required_user)):
                 if d.get(ts):
                     d[ts] = d[ts].isoformat()
             result.append(d)
-        return result
+        return {
+            "items": result,
+            "total": total,
+            "has_more": offset + len(result) < total,
+        }
     finally:
         cur.close()
         conn.close()

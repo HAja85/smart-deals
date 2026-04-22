@@ -3,14 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
+  SectionList,
   FlatList,
   TouchableOpacity,
   RefreshControl,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, type Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
@@ -19,15 +21,34 @@ import { StatusBadge } from '@/components/Badge';
 import type { Order } from '@/types/models';
 
 type StatusFilter = 'All' | 'Pending' | 'Authorized' | 'Captured' | 'Cancelled';
-
 const STATUS_TABS: StatusFilter[] = ['All', 'Pending', 'Authorized', 'Captured', 'Cancelled'];
+const PAGE_SIZE = 30;
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-KW', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+interface OrdersPage {
+  items: Order[];
+  total: number;
+  has_more: boolean;
+}
+
+interface Section {
+  title: string;
+  data: Order[];
+}
+
+function getMonthLabel(dateStr?: string): string {
+  if (!dateStr) return 'Unknown';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-KW', { month: 'long', year: 'numeric' });
+}
+
+function groupOrdersByMonth(orders: Order[]): Section[] {
+  const map = new Map<string, Order[]>();
+  for (const order of orders) {
+    const key = getMonthLabel(order.created_at);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(order);
+  }
+  return [...map.entries()].map(([title, data]) => ({ title, data }));
 }
 
 function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
@@ -38,7 +59,7 @@ function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
       backgroundColor: colors.card,
       borderRadius: 12,
       padding: 16,
-      marginBottom: 12,
+      marginBottom: 10,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.06,
@@ -51,52 +72,26 @@ function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
       alignItems: 'flex-start',
       marginBottom: 6,
     },
-    orderNum: {
-      fontSize: 13,
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.primary,
-    },
-    title: {
-      fontSize: 15,
-      fontFamily: 'Inter_600SemiBold',
-      color: colors.foreground,
-      marginBottom: 4,
-      flex: 1,
-      marginRight: 8,
-    },
-    meta: {
-      fontSize: 12,
-      fontFamily: 'Inter_400Regular',
-      color: colors.secondary,
-      marginBottom: 10,
-    },
-    bottomRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
+    orderNum: { fontSize: 12, fontFamily: 'Inter_500Medium', color: colors.secondary },
+    title: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.foreground, marginRight: 8, marginBottom: 4 },
+    meta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginBottom: 10 },
+    bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     statusRow: { flexDirection: 'row', gap: 6 },
-    amount: {
-      fontSize: 17,
-      fontFamily: 'Inter_700Bold',
-      color: colors.foreground,
-    },
+    amount: { fontSize: 17, fontFamily: 'Inter_700Bold', color: colors.foreground },
   });
 
+  const dateStr = order.created_at
+    ? new Date(order.created_at).toLocaleDateString('en-KW', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
+
   return (
-    <TouchableOpacity style={s.card} activeOpacity={0.8} onPress={onPress}>
+    <TouchableOpacity style={s.card} activeOpacity={0.7} onPress={onPress}>
       <View style={s.topRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.orderNum}>{order.order_number ?? `Order #${order.id}`}</Text>
-          <Text style={s.title} numberOfLines={1}>
-            {order.product_title ?? 'Order'}
-          </Text>
-          <Text style={s.meta}>
-            {order.quantity} unit{order.quantity > 1 ? 's' : ''} · {formatDate(order.created_at)}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.secondary} />
+        <Text style={s.orderNum}>Order #{order.id}</Text>
+        <Text style={s.orderNum}>{dateStr}</Text>
       </View>
+      <Text style={s.title} numberOfLines={2}>{order.product_title ?? 'Deal Order'}</Text>
+      <Text style={s.meta}>Qty: {order.quantity} · {order.product_brand ?? ''}</Text>
       <View style={s.bottomRow}>
         <View style={s.statusRow}>
           <StatusBadge status={order.payment_status} />
@@ -114,11 +109,29 @@ export default function OrdersScreen() {
   const router = useRouter();
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('All');
 
-  const { data: allOrders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
-    queryKey: ['/api/orders/my-orders'],
-    queryFn: async () => {
-      const res = await api.get<Order[]>('/orders/my-orders');
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+    isRefetching,
+  } = useInfiniteQuery<OrdersPage>({
+    queryKey: ['/api/orders/my-orders', filterStatus],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const params: Record<string, string | number> = {
+        limit: PAGE_SIZE,
+        offset: Number(pageParam),
+      };
+      if (filterStatus !== 'All') params.status = filterStatus;
+      const res = await api.get<OrdersPage>('/orders/my-orders', { params });
       return res.data;
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, p) => sum + p.items.length, 0);
+      return lastPage.has_more ? loaded : undefined;
     },
   });
 
@@ -126,31 +139,19 @@ export default function OrdersScreen() {
     refetch();
   }, [refetch]));
 
-  const orders = allOrders ?? [];
-  const filtered = filterStatus === 'All' ? orders : orders.filter((o) => o.payment_status === filterStatus);
+  const allOrders = data?.pages.flatMap((p) => p.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+  const sections = groupOrdersByMonth(allOrders);
 
-  const totalOrders = orders.length;
-  const confirmedOrders = orders.filter((o) => ['Authorized', 'Captured'].includes(o.payment_status)).length;
-  const totalSpent = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const confirmedOrders = allOrders.filter((o) => ['Authorized', 'Captured'].includes(o.payment_status)).length;
+  const totalSpent = allOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    statsRow: {
-      flexDirection: 'row',
-      padding: 16,
-      gap: 10,
-    },
+    statsRow: { flexDirection: 'row', padding: 16, gap: 10 },
     statCard: {
-      flex: 1,
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 12,
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 3,
-      elevation: 1,
+      flex: 1, backgroundColor: colors.card, borderRadius: 12, padding: 12, alignItems: 'center',
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
     },
     statNum: { fontSize: 20, fontFamily: 'Inter_700Bold', color: colors.primary, marginBottom: 2 },
     statLabel: { fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.secondary, textAlign: 'center' as const },
@@ -161,27 +162,30 @@ export default function OrdersScreen() {
       paddingVertical: 10,
     },
     tabContent: { paddingHorizontal: 16, gap: 8 },
-    tab: {
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 16,
-      borderWidth: 1.5,
-    },
+    tab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5 },
     tabLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
-    list: { padding: 16 },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      backgroundColor: colors.background,
+      gap: 8,
+    },
+    sectionTitle: { fontSize: 13, fontFamily: 'Inter_700Bold', color: colors.secondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+    sectionLine: { flex: 1, height: 1, backgroundColor: colors.border },
+    list: { paddingHorizontal: 16, paddingTop: 4 },
+    footer: { paddingVertical: 20, alignItems: 'center' as const },
     bottomPad: { height: Platform.OS === 'web' ? 34 : insets.bottom + 16 },
   });
 
   return (
     <View style={s.container}>
-      <ScreenHeader
-        title="My Orders"
-        subtitle={`${totalOrders} total`}
-      />
+      <ScreenHeader title="My Orders" subtitle={`${total} total`} />
 
       <View style={s.statsRow}>
         <View style={s.statCard}>
-          <Text style={s.statNum}>{totalOrders}</Text>
+          <Text style={s.statNum}>{total}</Text>
           <Text style={s.statLabel}>Orders</Text>
         </View>
         <View style={s.statCard}>
@@ -190,7 +194,7 @@ export default function OrdersScreen() {
         </View>
         <View style={s.statCard}>
           <Text style={[s.statNum, { fontSize: 14 }]}>KWD {totalSpent.toFixed(1)}</Text>
-          <Text style={s.statLabel}>Total Spent</Text>
+          <Text style={s.statLabel}>Loaded Spent</Text>
         </View>
       </View>
 
@@ -227,8 +231,8 @@ export default function OrdersScreen() {
       {isLoading ? (
         <LoadingOverlay />
       ) : (
-        <FlatList
-          data={filtered}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
             <OrderCard
@@ -236,8 +240,15 @@ export default function OrdersScreen() {
               onPress={() => router.push(`/order/${item.id}` as Href)}
             />
           )}
+          renderSectionHeader={({ section }) => (
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>{section.title}</Text>
+              <View style={s.sectionLine} />
+            </View>
+          )}
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -245,6 +256,8 @@ export default function OrdersScreen() {
               tintColor={colors.primary}
             />
           }
+          onEndReached={() => { if (hasNextPage && !isFetchingNextPage) fetchNextPage(); }}
+          onEndReachedThreshold={0.3}
           ListEmptyComponent={
             <EmptyState
               icon="receipt-outline"
@@ -253,7 +266,21 @@ export default function OrdersScreen() {
                 : `No ${filterStatus.toLowerCase()} orders.`}
             />
           }
-          ListFooterComponent={<View style={s.bottomPad} />}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <View style={s.footer}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : !hasNextPage && allOrders.length > 0 ? (
+              <View style={s.footer}>
+                <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary }}>
+                  All orders loaded
+                </Text>
+              </View>
+            ) : (
+              <View style={s.bottomPad} />
+            )
+          }
           scrollEnabled
         />
       )}

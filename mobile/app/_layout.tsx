@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import {
   useFonts,
   Inter_400Regular,
@@ -16,6 +17,7 @@ import {
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
 import type { NotificationData } from '@/types/models';
+import { api } from '@/services/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -124,6 +126,7 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [stripeKey, setStripeKey] = useState<string>('');
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -131,15 +134,27 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    api.get<{ stripe_publishable_key: string }>('/config')
+      .then((res) => {
+        if (res.data?.stripe_publishable_key) {
+          setStripeKey(res.data.stripe_publishable_key);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <AuthGate />
-          </AuthProvider>
+          <StripeProvider publishableKey={stripeKey || 'pk_test_placeholder'}>
+            <AuthProvider>
+              <AuthGate />
+            </AuthProvider>
+          </StripeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
