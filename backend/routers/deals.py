@@ -95,30 +95,80 @@ def parse_dt(s: str) -> datetime:
 @router.get("")
 def get_deals(
     status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        if status:
-            cur.execute("SELECT COUNT(*) AS total FROM deals WHERE status = %s", (status,))
-        else:
-            cur.execute("SELECT COUNT(*) AS total FROM deals")
-        total = cur.fetchone()["total"]
+        conditions = []
+        params: list = []
 
         if status:
-            cur.execute(
-                "SELECT * FROM deals WHERE status = %s ORDER BY start_time DESC, id DESC LIMIT %s OFFSET %s",
-                (status, limit, offset),
-            )
-        else:
-            cur.execute(
-                "SELECT * FROM deals ORDER BY start_time DESC, id DESC LIMIT %s OFFSET %s",
-                (limit, offset),
-            )
+            conditions.append("d.status = %s")
+            params.append(status)
+
+        if search and search.strip():
+            conditions.append("(p.title ILIKE %s OR p.brand ILIKE %s OR p.category ILIKE %s)")
+            like = f"%{search.strip()}%"
+            params.extend([like, like, like])
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        cur.execute(
+            f"""SELECT COUNT(*) AS total
+                FROM deals d
+                JOIN products p ON d.product_id = p.id
+                {where_clause}""",
+            params,
+        )
+        total = cur.fetchone()["total"]
+
+        cur.execute(
+            f"""SELECT d.*, p.title AS product_title, p.image AS product_image,
+                       p.brand AS product_brand, p.unit AS product_unit,
+                       p.category AS product_category, p.seller_name, p.seller_image
+                FROM deals d
+                JOIN products p ON d.product_id = p.id
+                {where_clause}
+                ORDER BY d.start_time DESC, d.id DESC
+                LIMIT %s OFFSET %s""",
+            params + [limit, offset],
+        )
         rows = cur.fetchall()
-        items = [get_deal_with_product(cur, dict(r)) for r in rows]
+        items = []
+        for row in rows:
+            d = dict(row)
+            product = {
+                "title": d.pop("product_title", None),
+                "image": d.pop("product_image", None),
+                "brand": d.pop("product_brand", None),
+                "unit": d.pop("product_unit", None),
+                "category": d.pop("product_category", None),
+                "seller_name": d.pop("seller_name", None),
+                "seller_image": d.pop("seller_image", None),
+            }
+            d["product"] = product
+            for f in ["price_per_unit", "actual_price"]:
+                if d.get(f) is not None:
+                    d[f] = float(d[f])
+            for ts in ["start_time", "end_time", "created_at"]:
+                if d.get(ts):
+                    d[ts] = d[ts].isoformat()
+            if d.get("actual_price") and d.get("price_per_unit") and d["actual_price"] > 0:
+                d["discount_percent"] = round(
+                    ((d["actual_price"] - d["price_per_unit"]) / d["actual_price"]) * 100, 1
+                )
+            else:
+                d["discount_percent"] = 0
+            if d.get("target_quantity") and d["target_quantity"] > 0:
+                d["progress_percent"] = min(
+                    round((d.get("current_quantity", 0) / d["target_quantity"]) * 100, 1), 100
+                )
+            else:
+                d["progress_percent"] = 0
+            items.append(d)
         return {"items": items, "total": total, "has_more": offset + len(items) < total}
     finally:
         cur.close()

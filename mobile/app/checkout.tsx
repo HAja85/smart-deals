@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { InputField, PrimaryButton } from '@/components/ui';
-import type { CartItem, CartResponse, Order } from '@/types/models';
+import type { CartItem, CartResponse } from '@/types/models';
 import { getApiError } from '@/types/models';
 
 let CardField: React.ComponentType<{
@@ -26,7 +26,10 @@ let CardField: React.ComponentType<{
 }> | null = null;
 
 let useConfirmPayment: (() => {
-  confirmPayment: (clientSecret: string, data: { paymentMethodType: string }) => Promise<{ paymentIntent?: unknown; error?: { message: string } }>;
+  confirmPayment: (
+    clientSecret: string,
+    data: { paymentMethodType: string }
+  ) => Promise<{ paymentIntent?: unknown; error?: { message: string } }>;
 }) | null = null;
 
 if (Platform.OS !== 'web') {
@@ -43,8 +46,21 @@ function useStripeConfirm() {
     return useConfirmPayment();
   }
   return {
-    confirmPayment: async (_cs: string, _data: unknown) => ({ paymentIntent: null, error: null }),
+    confirmPayment: async (
+      _cs: string,
+      _data: unknown
+    ): Promise<{ paymentIntent?: unknown; error?: { message: string } | null }> => ({
+      paymentIntent: null,
+      error: null,
+    }),
   };
+}
+
+interface CartCheckoutResponse {
+  order_ids: number[];
+  orders: Array<{ id: number; deal_id: number; quantity: number; total_amount: number }>;
+  cart_total: number;
+  stripe_client_secret: string;
 }
 
 export default function CheckoutScreen() {
@@ -107,22 +123,14 @@ export default function CheckoutScreen() {
     setIsPlacingOrder(true);
 
     try {
-      const orderResponses: Order[] = [];
-      for (const item of items) {
-        const res = await api.post<Order>('/orders', {
-          deal_id: item.deal_id,
-          quantity: item.quantity,
-          delivery_address: address.trim(),
-          mobile_number: mobile.trim(),
-        });
-        orderResponses.push(res.data);
-      }
+      const checkoutRes = await api.post<CartCheckoutResponse>('/cart/checkout', {
+        delivery_address: address.trim(),
+        mobile_number: mobile.trim(),
+      });
+      const { order_ids, stripe_client_secret, orders } = checkoutRes.data;
 
-      const firstOrder = orderResponses[0];
-      const clientSecret = firstOrder?.stripe_client_secret;
-
-      if (clientSecret && Platform.OS !== 'web' && CardField) {
-        const { error } = await confirmPayment(clientSecret, {
+      if (stripe_client_secret && Platform.OS !== 'web' && CardField) {
+        const { error } = await confirmPayment(stripe_client_secret, {
           paymentMethodType: 'Card',
         });
         if (error) {
@@ -132,19 +140,15 @@ export default function CheckoutScreen() {
         }
       }
 
-      for (const order of orderResponses) {
-        if (order.id) {
-          await api.post(`/orders/${order.id}/confirm-payment`).catch(() => {});
-        }
-      }
+      await api.post('/cart/confirm-checkout', { order_ids }).catch(() => {});
 
-      await api.delete('/cart').catch(() => {});
       queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-orders'] });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      if (firstOrder?.id) {
-        router.replace(`/order/${firstOrder.id}` as Href);
+      const firstOrderId = orders?.[0]?.id ?? order_ids?.[0];
+      if (firstOrderId) {
+        router.replace(`/order/${firstOrderId}` as Href);
       } else {
         router.replace('/(consumer)/orders' as Href);
       }

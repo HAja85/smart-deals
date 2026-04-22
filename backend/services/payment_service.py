@@ -11,6 +11,19 @@ def kwd_to_cents(kwd_amount: float) -> int:
     return max(int(round(usd * 100)), 50)
 
 
+def create_cart_payment_intent(user_id: int, order_ids: list, total_kwd: float, currency: str = "usd") -> dict:
+    amount_cents = kwd_to_cents(total_kwd)
+    idempotency_key = f"cart_{user_id}_{'_'.join(str(i) for i in sorted(order_ids))}_create"
+    intent = stripe.PaymentIntent.create(
+        amount=amount_cents,
+        currency=currency,
+        capture_method="manual",
+        metadata={"user_id": str(user_id), "order_ids": ",".join(str(i) for i in order_ids)},
+        idempotency_key=idempotency_key,
+    )
+    return {"client_secret": intent.client_secret, "payment_intent_id": intent.id}
+
+
 def create_payment_intent(order_id: int, amount_kwd: float, currency: str = "usd") -> dict:
     amount_cents = kwd_to_cents(amount_kwd)
     intent = stripe.PaymentIntent.create(

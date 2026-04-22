@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from typing import List, Optional
 from backend.database import get_connection
 from backend.auth import decode_token
+from backend.services.payment_service import create_cart_payment_intent
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 security = HTTPBearer()
@@ -180,6 +182,132 @@ def remove_from_cart(deal_id: int, user=Depends(consumer_only)):
             raise HTTPException(status_code=404, detail="Cart item not found")
         conn.commit()
         return {"message": "Removed from cart"}
+    finally:
+        cur.close()
+        conn.close()
+
+
+class CartCheckoutRequest(BaseModel):
+    delivery_address: str
+    mobile_number: str
+
+
+class ConfirmCheckoutRequest(BaseModel):
+    order_ids: List[int]
+
+
+@router.post("/checkout")
+def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
+    """Create orders for all cart items, create a single Stripe PaymentIntent for the total,
+    and return the client_secret for client-side confirmation."""
+    if not data.delivery_address.strip():
+        raise HTTPException(status_code=400, detail="Delivery address is required")
+    if not data.mobile_number.strip():
+        raise HTTPException(status_code=400, detail="Mobile number is required")
+
+    conn = get_connection()
+    conn.autocommit = False
+    cur = conn.cursor()
+    try:
+        user_id = int(user["sub"])
+        cur.execute("""
+            SELECT ci.deal_id, ci.quantity,
+                   d.price_per_unit, d.actual_price, d.status, d.seller_id,
+                   p.title AS product_title
+            FROM cart_items ci
+            JOIN deals d ON ci.deal_id = d.id
+            JOIN products p ON d.product_id = p.id
+            WHERE ci.user_id = %s AND d.status = 'Active'
+            ORDER BY ci.added_at DESC
+        """, (user_id,))
+        items = [dict(r) for r in cur.fetchall()]
+        if not items:
+            raise HTTPException(status_code=400, detail="Your cart is empty or all deals have ended")
+
+        created_orders = []
+        cart_total_kwd = 0.0
+        for item in items:
+            price = float(item["price_per_unit"])
+            qty = item["quantity"]
+            line_total = round(price * qty, 3)
+            cart_total_kwd += line_total
+            cur.execute("""
+                INSERT INTO orders
+                    (user_id, deal_id, quantity, total_amount, payment_status, delivery_address, mobile_number)
+                VALUES (%s, %s, %s, %s, 'Pending', %s, %s)
+                RETURNING id, deal_id, quantity, total_amount
+            """, (user_id, item["deal_id"], qty, line_total,
+                  data.delivery_address.strip(), data.mobile_number.strip()))
+            order_row = dict(cur.fetchone())
+            created_orders.append(order_row)
+            cur.execute(
+                "UPDATE deals SET current_quantity = current_quantity + %s WHERE id = %s",
+                (qty, item["deal_id"]),
+            )
+
+        order_ids = [o["id"] for o in created_orders]
+        pi_data = create_cart_payment_intent(user_id, order_ids, cart_total_kwd)
+        pi_id = pi_data["payment_intent_id"]
+        client_secret = pi_data["client_secret"]
+
+        for oid in order_ids:
+            cur.execute(
+                "UPDATE orders SET stripe_payment_intent_id = %s, stripe_client_secret = %s WHERE id = %s",
+                (pi_id, client_secret, oid),
+            )
+
+        cur.execute("DELETE FROM cart_items WHERE user_id = %s", (user_id,))
+        conn.commit()
+
+        return {
+            "order_ids": order_ids,
+            "orders": [
+                {
+                    "id": o["id"],
+                    "deal_id": o["deal_id"],
+                    "quantity": o["quantity"],
+                    "total_amount": float(o["total_amount"]),
+                }
+                for o in created_orders
+            ],
+            "cart_total": round(cart_total_kwd, 3),
+            "stripe_client_secret": client_secret,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.post("/confirm-checkout")
+def confirm_checkout(data: ConfirmCheckoutRequest, user=Depends(consumer_only)):
+    """Mark all given orders as Authorized after successful Stripe client-side confirmation."""
+    if not data.order_ids:
+        raise HTTPException(status_code=400, detail="No order IDs provided")
+    conn = get_connection()
+    conn.autocommit = False
+    cur = conn.cursor()
+    try:
+        user_id = int(user["sub"])
+        placeholders = ",".join(["%s"] * len(data.order_ids))
+        cur.execute(
+            f"""UPDATE orders
+               SET payment_status = 'Authorized', paid_at = NOW()
+               WHERE id IN ({placeholders}) AND user_id = %s AND payment_status = 'Pending'
+               RETURNING id""",
+            data.order_ids + [user_id],
+        )
+        updated_ids = [dict(r)["id"] for r in cur.fetchall()]
+        conn.commit()
+        return {"confirmed_order_ids": updated_ids, "count": len(updated_ids)}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()

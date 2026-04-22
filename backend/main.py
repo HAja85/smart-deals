@@ -103,10 +103,13 @@ def check_deal_statuses():
                         (deal["id"],)
                     )
                     affected_orders = cur.fetchall()
+                    captured_pis: set = set()
                     for order in affected_orders:
                         order = dict(order)
-                        if order.get("stripe_payment_intent_id"):
-                            payment_service.capture_payment(order["stripe_payment_intent_id"])
+                        pi_id = order.get("stripe_payment_intent_id")
+                        if pi_id and pi_id not in captured_pis:
+                            payment_service.capture_payment(pi_id)
+                            captured_pis.add(pi_id)
                     cur.execute(
                         "UPDATE orders SET payment_status = 'Captured', paid_at = NOW() WHERE deal_id = %s AND payment_status = 'Authorized'",
                         (deal["id"],)
