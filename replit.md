@@ -1,8 +1,9 @@
 # SmartDeals Kuwait
 
-Kuwait's group-buying marketplace for supermarket essentials. Built with React + Vite frontend and FastAPI + PostgreSQL backend.
+Kuwait's group-buying marketplace for supermarket essentials. Built with React + Vite frontend, FastAPI + PostgreSQL backend, and a React Native (Expo) mobile app.
 
 ## Recent Additions
+- **Mobile App (Task #2)**: Full Expo SDK 52 React Native app at `/mobile`. Auth (login/3-step signup), consumer tabs (Home, Deals, Cart, Orders, Profile), supplier tabs (Home, Products, Deals, Orders, Dashboard), push notifications, JWT in SecureStore, DealCard with live countdown + progress bar.
 - **Image Upload**: `POST /api/upload` endpoint (FastAPI, max 5 MB, JPG/PNG/WebP/GIF). Uploaded files stored in `/uploads/`, served as static files via `/uploads/<filename>`. Reusable `ImageUploader` component with drag-and-drop + file browse + paste URL tabs.
 - **Signup profile image**: uses `ImageUploader` instead of plain URL field
 - **Create Product image**: uses `ImageUploader` instead of plain URL field
@@ -10,6 +11,36 @@ Kuwait's group-buying marketplace for supermarket essentials. Built with React +
 - **Enhanced Deal Cards**: hot/almost-full badges (fire icon), amber savings badge, coloured progress bar, hover lift animation
 
 ## Architecture
+
+### Mobile App (React Native + Expo)
+- **Expo SDK 52** / **React Native 0.76** / **expo-router 4** (file-based routing)
+- **Port 8080** — Metro bundler serves Expo Web; QR code for Expo Go on physical devices
+- **Brand**: primary `#34699A` (Kuwait blue), accent `#F59E0B` (amber)
+- **JWT** stored in `expo-secure-store` (native) / `localStorage` (web)
+- **Axios** service with automatic JWT injection and 401 logout
+- **@tanstack/react-query** for data fetching/caching
+- **Push notifications** via `expo-notifications` (registered on login, unregistered on logout)
+- **API URL**: `EXPO_PUBLIC_API_URL=https://$REPLIT_DEV_DOMAIN/api` (set in workflow, passes through Vite proxy)
+
+#### Mobile App Structure
+```
+mobile/
+  app/
+    _layout.tsx          — Root: providers + auth gate (redirects by role)
+    index.tsx            — Redirect to /(auth)/login
+    (auth)/login.tsx     — Email + password login + demo credentials box
+    (auth)/signup.tsx    — 3-step: info → email OTP → mobile OTP
+    (consumer)/          — Tabs: Home, Deals, Cart, Orders, Profile
+    (supplier)/          — Tabs: Home, Products, Deals, Orders, Dashboard
+  components/
+    DealCard.tsx         — Deal card: image, price, progress bar, countdown, badges
+    ui.tsx               — InputField, PrimaryButton, EmptyState, ScreenHeader
+  hooks/
+    useAuth.tsx          — Auth context: login/logout/refreshUser, push token mgmt
+    useColors.ts         — Color scheme hook
+  services/api.ts        — Axios instance, token storage, 401 interceptor
+  constants/colors.ts    — Brand color palette
+```
 
 ### Frontend (React + Vite)
 - **React 19** with React Router 7
@@ -27,22 +58,25 @@ Kuwait's group-buying marketplace for supermarket essentials. Built with React +
 
 ## Running the App
 
-Two workflows:
+Three workflows:
 - **Start Backend**: `bash start_backend.sh` → FastAPI on port 8000
 - **Start application**: `npm run dev` → Vite on port 5000
+- **Start Mobile App**: `cd mobile && EXPO_PUBLIC_API_URL=https://$REPLIT_DEV_DOMAIN/api npx expo start --web --port 8080`
 
 ## Database Schema
 
 ```sql
 users       — id, name, email, password_hash, image, role (supplier|consumer), created_at
 products    — id, title, category, brand, unit, description, image, seller_id, seller_name, ...
-deals       — id, product_id, seller_id, target_quantity, current_quantity, price_per_unit, start_time, end_time, status (Active|Successful|Failed)
-orders      — id, user_id, deal_id, quantity, total_amount, payment_status (Pending|Captured|Cancelled)
+deals       — id, product_id, seller_id, target_quantity, current_quantity, price_per_unit, start_time, end_time, status (Active|Successful|Failed), view_count
+orders      — id, user_id, deal_id, quantity, total_amount, payment_status (Pending|Captured|Cancelled), delivery_status
+cart_items  — id, user_id, deal_id, quantity, added_at
+push_tokens — id, user_id, token, platform, created_at
 ```
 
 ## Authentication & Roles
 
-- JWT tokens stored in `localStorage` as `smart_deals_token`
+- JWT tokens stored in `localStorage` as `smart_deals_token` (web) / `expo-secure-store` (native)
 - Token payload: `sub` (user id), `email`, `role`
 - **Supplier**: can create products and deals
 - **Consumer**: can browse and join deals
@@ -53,6 +87,7 @@ orders      — id, user_id, deal_id, quantity, total_amount, payment_status (Pe
 |----------|----------------------------|--------------|
 | Supplier | supplier@smartdeals.kw     | Supplier123  |
 | Consumer | consumer@smartdeals.kw     | Consumer123  |
+| Admin    | admin@smartdeals.kw        | Admin@123    |
 
 Re-run seed: `python -m backend.seed`
 
@@ -73,6 +108,8 @@ Re-run seed: `python -m backend.seed`
 POST  /api/auth/register         — Register (returns JWT + user)
 POST  /api/auth/login            — Login
 GET   /api/auth/me               — Current user (Bearer token)
+POST  /api/auth/send-email-otp   — Send email OTP (returns otp in demo_mode)
+POST  /api/auth/send-mobile-otp  — Send mobile OTP (returns otp in demo_mode)
 
 GET   /api/products              — All products
 GET   /api/products/my-products  — Supplier's products (auth)
@@ -124,6 +161,7 @@ GET   /api/upcoming-deals        — 6 upcoming deals
 2. **Deal Success**: if `current_quantity >= target_quantity` → status = Successful → all orders = Captured
 3. **Deal Failure**: scheduler runs every minute → if `now >= end_time` AND target not met → status = Failed → orders = Cancelled
 4. **Background Scheduler**: APScheduler checks all Active deals every 60 seconds
+5. **Cart Cleanup**: expired deals auto-removed from cart on every GET /api/cart request
 
 ## Frontend Pages & Routes
 
