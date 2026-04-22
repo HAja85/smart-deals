@@ -9,6 +9,7 @@ import {
   Platform,
   Animated,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useRouter, type Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -131,8 +132,11 @@ function CartItemRow({
     },
     expiredText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#DC2626', flex: 1 },
     expiredDismiss: { fontSize: 11, fontFamily: 'Inter_500Medium', color: '#DC2626' },
-    topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-    title: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold', color: isExpired ? '#6B7280' : colors.foreground },
+    imageWrap: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.primary + '15', overflow: 'hidden', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
+    productImage: { width: 56, height: 56, borderRadius: 8 },
+    topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'flex-start' },
+    titleBlock: { flex: 1, marginRight: 4 },
+    title: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: isExpired ? '#6B7280' : colors.foreground, marginBottom: 2 },
     removeBtn: { padding: 4 },
     brand: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginBottom: 10 },
     priceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
@@ -174,12 +178,21 @@ function CartItemRow({
           </View>
         )}
         <View style={s.topRow}>
-          <Text style={s.title} numberOfLines={1}>{item.product_title ?? 'Deal'}</Text>
+          <View style={s.imageWrap}>
+            {item.product_image ? (
+              <Image source={{ uri: item.product_image }} style={s.productImage} resizeMode="cover" />
+            ) : (
+              <Ionicons name="cube-outline" size={24} color={colors.primary + '60'} />
+            )}
+          </View>
+          <View style={s.titleBlock}>
+            <Text style={s.title} numberOfLines={1}>{item.product_title ?? 'Deal'}</Text>
+            <Text style={s.brand}>{item.product_brand ?? ''}{item.product_unit ? ` · ${item.product_unit}` : ''}</Text>
+          </View>
           <TouchableOpacity style={s.removeBtn} onPress={() => onRemove(item.deal_id)}>
             <Ionicons name="trash-outline" size={18} color="#EF4444" />
           </TouchableOpacity>
         </View>
-        <Text style={s.brand}>{item.product_brand ?? ''}{item.product_unit ? ` · ${item.product_unit}` : ''}</Text>
         <View style={s.priceRow}>
           <Text style={s.price}>KWD {unitPrice.toFixed(3)}/unit</Text>
           {actualPrice > unitPrice && (

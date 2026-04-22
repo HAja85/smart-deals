@@ -219,7 +219,7 @@ def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
             FROM cart_items ci
             JOIN deals d ON ci.deal_id = d.id
             JOIN products p ON d.product_id = p.id
-            WHERE ci.user_id = %s AND d.status = 'Active'
+            WHERE ci.user_id = %s AND d.status = 'Active' AND d.end_time > NOW()
             ORDER BY ci.added_at DESC
         """, (user_id,))
         items = [dict(r) for r in cur.fetchall()]

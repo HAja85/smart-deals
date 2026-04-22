@@ -73,9 +73,6 @@ export default function CheckoutScreen() {
   const [address, setAddress] = useState('');
   const [mobile, setMobile] = useState('');
   const [cardComplete, setCardComplete] = useState(false);
-  const [webCardNumber, setWebCardNumber] = useState('');
-  const [webCardExpiry, setWebCardExpiry] = useState('');
-  const [webCardCvc, setWebCardCvc] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
@@ -175,17 +172,6 @@ export default function CheckoutScreen() {
     } finally {
       setIsPlacingOrder(false);
     }
-  };
-
-  const formatCardNumber = (text: string) => {
-    const cleaned = text.replace(/\D/g, '').slice(0, 16);
-    return cleaned.replace(/(.{4})/g, '$1 ').trim();
-  };
-
-  const formatExpiry = (text: string) => {
-    const cleaned = text.replace(/\D/g, '').slice(0, 4);
-    if (cleaned.length >= 2) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
-    return cleaned;
   };
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
