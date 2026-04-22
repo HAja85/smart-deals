@@ -56,11 +56,19 @@ function useStripeConfirm() {
   };
 }
 
+interface CartCheckoutOrder {
+  id: number;
+  deal_id: number;
+  quantity: number;
+  total_amount: number;
+  client_secret?: string;
+}
+
 interface CartCheckoutResponse {
   order_ids: number[];
-  orders: Array<{ id: number; deal_id: number; quantity: number; total_amount: number }>;
+  orders: CartCheckoutOrder[];
   cart_total: number;
-  stripe_client_secret: string;
+  stripe_client_secret: string | null;
 }
 
 export default function CheckoutScreen() {
@@ -132,21 +140,23 @@ export default function CheckoutScreen() {
         delivery_address: address.trim(),
         mobile_number: mobile.trim(),
       });
-      const { order_ids, stripe_client_secret, orders } = checkoutRes.data;
+      const { order_ids, orders } = checkoutRes.data;
       createdOrderIds = order_ids;
 
-      if (stripe_client_secret && Platform.OS !== 'web' && CardField) {
-        const { error } = await confirmPayment(stripe_client_secret, {
-          paymentMethodType: 'Card',
-        });
-        if (error) {
-          await rollbackOrders();
-          setIsPlacingOrder(false);
-          Alert.alert(
-            'Payment Failed',
-            error.message + '\n\nYour cart has been restored — please try again.'
-          );
-          return;
+      if (Platform.OS !== 'web' && CardField) {
+        for (const order of orders) {
+          const cs = order.client_secret;
+          if (!cs) continue;
+          const { error } = await confirmPayment(cs, { paymentMethodType: 'Card' });
+          if (error) {
+            await rollbackOrders();
+            setIsPlacingOrder(false);
+            Alert.alert(
+              'Payment Failed',
+              error.message + '\n\nYour cart has been restored — please try again.'
+            );
+            return;
+          }
         }
       }
 

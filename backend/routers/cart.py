@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from backend.database import get_connection
 from backend.auth import decode_token
-from backend.services.payment_service import create_cart_payment_intent, verify_payment_authorized, cancel_payment
+from backend.services.payment_service import create_payment_intent, verify_payment_authorized, cancel_payment
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 security = HTTPBearer()
@@ -200,8 +200,8 @@ class ConfirmCheckoutRequest(BaseModel):
 
 @router.post("/checkout")
 def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
-    """Create orders for all cart items, create a single Stripe PaymentIntent for the total,
-    and return the client_secret for client-side confirmation."""
+    """Create orders for all active cart items, one Stripe PaymentIntent per order,
+    so each deal can be captured/cancelled independently at settlement time."""
     if not data.delivery_address.strip():
         raise HTTPException(status_code=400, detail="Delivery address is required")
     if not data.mobile_number.strip():
@@ -241,26 +241,25 @@ def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
             """, (user_id, item["deal_id"], qty, line_total,
                   data.delivery_address.strip(), data.mobile_number.strip()))
             order_row = dict(cur.fetchone())
-            created_orders.append(order_row)
+            order_id = order_row["id"]
+            pi_data = create_payment_intent(order_id, line_total, user_id=user_id)
+            cur.execute(
+                "UPDATE orders SET stripe_payment_intent_id = %s, stripe_client_secret = %s WHERE id = %s",
+                (pi_data["payment_intent_id"], pi_data["client_secret"], order_id),
+            )
             cur.execute(
                 "UPDATE deals SET current_quantity = current_quantity + %s WHERE id = %s",
                 (qty, item["deal_id"]),
             )
-
-        order_ids = [o["id"] for o in created_orders]
-        pi_data = create_cart_payment_intent(user_id, order_ids, cart_total_kwd)
-        pi_id = pi_data["payment_intent_id"]
-        client_secret = pi_data["client_secret"]
-
-        for oid in order_ids:
-            cur.execute(
-                "UPDATE orders SET stripe_payment_intent_id = %s, stripe_client_secret = %s WHERE id = %s",
-                (pi_id, client_secret, oid),
-            )
+            created_orders.append({
+                **order_row,
+                "client_secret": pi_data["client_secret"],
+            })
 
         cur.execute("DELETE FROM cart_items WHERE user_id = %s", (user_id,))
         conn.commit()
 
+        order_ids = [o["id"] for o in created_orders]
         return {
             "order_ids": order_ids,
             "orders": [
@@ -269,11 +268,12 @@ def cart_checkout(data: CartCheckoutRequest, user=Depends(consumer_only)):
                     "deal_id": o["deal_id"],
                     "quantity": o["quantity"],
                     "total_amount": float(o["total_amount"]),
+                    "client_secret": o["client_secret"],
                 }
                 for o in created_orders
             ],
             "cart_total": round(cart_total_kwd, 3),
-            "stripe_client_secret": client_secret,
+            "stripe_client_secret": created_orders[0]["client_secret"] if len(created_orders) == 1 else None,
         }
     except HTTPException:
         conn.rollback()

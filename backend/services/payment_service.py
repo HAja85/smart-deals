@@ -24,13 +24,13 @@ def create_cart_payment_intent(user_id: int, order_ids: list, total_kwd: float, 
     return {"client_secret": intent.client_secret, "payment_intent_id": intent.id}
 
 
-def create_payment_intent(order_id: int, amount_kwd: float, currency: str = "usd") -> dict:
+def create_payment_intent(order_id: int, amount_kwd: float, currency: str = "usd", user_id: int = 0) -> dict:
     amount_cents = kwd_to_cents(amount_kwd)
     intent = stripe.PaymentIntent.create(
         amount=amount_cents,
         currency=currency,
         capture_method="manual",
-        metadata={"order_id": str(order_id)},
+        metadata={"order_id": str(order_id), "user_id": str(user_id)},
         idempotency_key=f"order_{order_id}_create",
     )
     return {"client_secret": intent.client_secret, "payment_intent_id": intent.id}
