@@ -14,12 +14,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { ScreenHeader } from '@/components/ui';
+import type { Deal, Order } from '@/types/models';
+import { getApiError as apiErr } from '@/types/models';
 
-const PERIODS = [
-  { label: '7D', from: daysAgo(7) },
-  { label: '30D', from: daysAgo(30) },
-  { label: '90D', from: daysAgo(90) },
-  { label: '1Y', from: daysAgo(365) },
+interface DealsResponse {
+  deals?: Deal[];
+}
+
+interface OrdersResponse {
+  orders?: Order[];
+}
+
+const PERIODS: { label: string; days: number }[] = [
+  { label: '7D', days: 7 },
+  { label: '30D', days: 30 },
+  { label: '90D', days: 90 },
+  { label: '1Y', days: 365 },
 ];
 
 function daysAgo(n: number): string {
@@ -28,7 +38,7 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function today(): string {
+function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -55,7 +65,12 @@ function MetricTile({ label, value, icon, color }: MetricTileProps) {
       shadowRadius: 6,
       elevation: 3,
     },
-    iconRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    iconRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
     iconWrap: {
       width: 38,
       height: 38,
@@ -64,7 +79,12 @@ function MetricTile({ label, value, icon, color }: MetricTileProps) {
       alignItems: 'center',
     },
     value: { fontSize: 22, fontFamily: 'Inter_700Bold', color: colors.foreground },
-    label: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginTop: 2 },
+    label: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: colors.secondary,
+      marginTop: 2,
+    },
   });
 
   return (
@@ -86,40 +106,52 @@ export default function DashboardScreen() {
   const [periodIdx, setPeriodIdx] = useState(1);
   const [downloading, setDownloading] = useState(false);
 
-  const fromDate = PERIODS[periodIdx].from;
-  const toDate = today();
+  const fromDate = daysAgo(PERIODS[periodIdx].days);
+  const toDate = todayStr();
 
-  const { data: orders } = useQuery({
+  const { data: ordersData } = useQuery<Order[]>({
     queryKey: ['/api/orders/supplier-orders'],
     queryFn: async () => {
-      const res = await api.get('/orders/supplier-orders');
-      return res.data;
+      const res = await api.get<Order[] | OrdersResponse>('/orders/supplier-orders');
+      if (Array.isArray(res.data)) return res.data;
+      return (res.data as OrdersResponse).orders ?? [];
     },
   });
 
-  const { data: deals } = useQuery({
+  const { data: dealsData } = useQuery<Deal[]>({
     queryKey: ['/api/deals/my-deals'],
     queryFn: async () => {
-      const res = await api.get('/deals/my-deals');
-      return res.data;
+      const res = await api.get<Deal[] | DealsResponse>('/deals/my-deals');
+      if (Array.isArray(res.data)) return res.data;
+      return (res.data as DealsResponse).deals ?? [];
     },
   });
 
-  const ordersList = Array.isArray(orders) ? orders : orders?.orders ?? [];
-  const dealsList = Array.isArray(deals) ? deals : deals?.deals ?? [];
+  const ordersList: Order[] = ordersData ?? [];
+  const dealsList: Deal[] = dealsData ?? [];
 
-  const capturedOrders = ordersList.filter((o: any) => o.payment_status === 'Captured');
-  const revenue = capturedOrders.reduce((s: number, o: any) => s + Number(o.total_amount ?? 0), 0);
-  const unitsSold = capturedOrders.reduce((s: number, o: any) => s + Number(o.quantity ?? 0), 0);
+  const capturedOrders = ordersList.filter((o) => o.payment_status === 'Captured');
+  const revenue = capturedOrders.reduce(
+    (sum, o) => sum + Number(o.total_amount ?? 0),
+    0
+  );
+  const unitsSold = capturedOrders.reduce(
+    (sum, o) => sum + Number(o.quantity ?? 0),
+    0
+  );
   const successRate =
     dealsList.length > 0
-      ? Math.round((dealsList.filter((d: any) => d.status === 'Successful').length / dealsList.length) * 100)
+      ? Math.round(
+          (dealsList.filter((d) => d.status === 'Successful').length /
+            dealsList.length) *
+            100
+        )
       : 0;
 
-  const handleDownloadReport = async () => {
+  const handleDownloadReport = () => {
     Alert.alert(
       'Download Report',
-      `Accounting report for ${PERIODS[periodIdx].label} will be downloaded to your device.`,
+      `Accounting report for ${PERIODS[periodIdx].label} will be generated.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -127,10 +159,15 @@ export default function DashboardScreen() {
           onPress: async () => {
             setDownloading(true);
             try {
-              await api.get(`/reports/supplier?from=${fromDate}&to=${toDate}`);
-              Alert.alert('Report Generated', 'The PDF report has been requested. Check orders for details.');
-            } catch {
-              Alert.alert('Error', 'Failed to generate report. Please try again.');
+              await api.get(
+                `/reports/supplier?from=${fromDate}&to=${toDate}`
+              );
+              Alert.alert(
+                'Report Generated',
+                'The PDF report has been requested.'
+              );
+            } catch (err: unknown) {
+              Alert.alert('Error', apiErr(err, 'Failed to generate report.'));
             } finally {
               setDownloading(false);
             }
@@ -138,6 +175,12 @@ export default function DashboardScreen() {
         },
       ]
     );
+  };
+
+  const STATUS_COLORS: Record<string, string> = {
+    Active: colors.primary,
+    Successful: colors.success,
+    Failed: colors.error,
   };
 
   const s = StyleSheet.create({
@@ -156,9 +199,18 @@ export default function DashboardScreen() {
       borderWidth: 1.5,
     },
     periodLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
-    metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10 },
+    metricsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: 10,
+    },
     section: { paddingHorizontal: 20, marginTop: 20 },
-    sectionTitle: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 12 },
+    sectionTitle: {
+      fontSize: 16,
+      fontFamily: 'Inter_700Bold',
+      color: colors.foreground,
+      marginBottom: 12,
+    },
     reportBtn: {
       backgroundColor: colors.primary,
       borderRadius: 12,
@@ -168,7 +220,11 @@ export default function DashboardScreen() {
       paddingVertical: 14,
       gap: 8,
     },
-    reportBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
+    reportBtnText: {
+      fontSize: 15,
+      fontFamily: 'Inter_600SemiBold',
+      color: '#FFFFFF',
+    },
     dealRow: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -177,16 +233,15 @@ export default function DashboardScreen() {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    dealTitle: { flex: 1, fontSize: 14, fontFamily: 'Inter_500Medium', color: colors.foreground },
+    dealTitle: {
+      flex: 1,
+      fontSize: 14,
+      fontFamily: 'Inter_500Medium',
+      color: colors.foreground,
+    },
     dealStatus: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
     bottomPad: { height: Platform.OS === 'web' ? 34 : insets.bottom + 24 },
   });
-
-  const statusColors: Record<string, string> = {
-    Active: colors.primary,
-    Successful: colors.success,
-    Failed: colors.error,
-  };
 
   return (
     <View style={s.container}>
@@ -200,13 +255,23 @@ export default function DashboardScreen() {
               style={[
                 s.periodBtn,
                 {
-                  backgroundColor: i === periodIdx ? colors.primary : colors.card,
-                  borderColor: i === periodIdx ? colors.primary : colors.border,
+                  backgroundColor:
+                    i === periodIdx ? colors.primary : colors.card,
+                  borderColor:
+                    i === periodIdx ? colors.primary : colors.border,
                 },
               ]}
               onPress={() => setPeriodIdx(i)}
             >
-              <Text style={[s.periodLabel, { color: i === periodIdx ? '#FFFFFF' : colors.secondary }]}>
+              <Text
+                style={[
+                  s.periodLabel,
+                  {
+                    color:
+                      i === periodIdx ? '#FFFFFF' : colors.secondary,
+                  },
+                ]}
+              >
                 {p.label}
               </Text>
             </TouchableOpacity>
@@ -214,28 +279,61 @@ export default function DashboardScreen() {
         </View>
 
         <View style={s.metricsGrid}>
-          <MetricTile label="Total Revenue" value={`KWD ${revenue.toFixed(3)}`} icon="cash" color={colors.success} />
-          <MetricTile label="Units Sold" value={String(unitsSold)} icon="cube" color={colors.primary} />
-          <MetricTile label="Deals" value={String(dealsList.length)} icon="pricetag" color={colors.accent} />
-          <MetricTile label="Success Rate" value={`${successRate}%`} icon="trending-up" color="#8B5CF6" />
+          <MetricTile
+            label="Total Revenue"
+            value={`KWD ${revenue.toFixed(3)}`}
+            icon="cash"
+            color={colors.success}
+          />
+          <MetricTile
+            label="Units Sold"
+            value={String(unitsSold)}
+            icon="cube"
+            color={colors.primary}
+          />
+          <MetricTile
+            label="Deals"
+            value={String(dealsList.length)}
+            icon="pricetag"
+            color={colors.accent}
+          />
+          <MetricTile
+            label="Success Rate"
+            value={`${successRate}%`}
+            icon="trending-up"
+            color="#8B5CF6"
+          />
         </View>
 
         <View style={s.section}>
           <Text style={s.sectionTitle}>Accounting Report</Text>
-          <TouchableOpacity style={s.reportBtn} onPress={handleDownloadReport} disabled={downloading}>
+          <TouchableOpacity
+            style={s.reportBtn}
+            onPress={handleDownloadReport}
+            disabled={downloading}
+          >
             <Ionicons name="document-text" size={18} color="#FFFFFF" />
             <Text style={s.reportBtnText}>
-              {downloading ? 'Generating...' : `Download PDF — ${PERIODS[periodIdx].label}`}
+              {downloading
+                ? 'Generating...'
+                : `Download PDF — ${PERIODS[periodIdx].label}`}
             </Text>
           </TouchableOpacity>
         </View>
 
         <View style={s.section}>
           <Text style={s.sectionTitle}>Recent Deals</Text>
-          {dealsList.slice(0, 5).map((deal: any) => (
+          {dealsList.slice(0, 5).map((deal) => (
             <View key={deal.id} style={s.dealRow}>
-              <Text style={s.dealTitle} numberOfLines={1}>{deal.product_title ?? deal.title ?? 'Deal'}</Text>
-              <Text style={[s.dealStatus, { color: statusColors[deal.status] ?? colors.secondary }]}>
+              <Text style={s.dealTitle} numberOfLines={1}>
+                {deal.product_title ?? deal.title ?? 'Deal'}
+              </Text>
+              <Text
+                style={[
+                  s.dealStatus,
+                  { color: STATUS_COLORS[deal.status] ?? colors.secondary },
+                ]}
+              >
                 {deal.status}
               </Text>
             </View>

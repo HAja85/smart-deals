@@ -1,33 +1,42 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
   RefreshControl,
   Platform,
 } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { DealCard } from '@/components/DealCard';
 import { EmptyState, ScreenHeader } from '@/components/ui';
+import type { Deal } from '@/types/models';
+
+interface DealsResponse {
+  deals?: Deal[];
+}
 
 export default function DealsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<Deal[]>({
     queryKey: ['/api/deals', { status: 'Active' }],
     queryFn: async () => {
-      const res = await api.get('/deals', { params: { status: 'Active', limit: 50 } });
-      return res.data;
+      const res = await api.get<Deal[] | DealsResponse>('/deals', {
+        params: { status: 'Active', limit: 50 },
+      });
+      if (Array.isArray(res.data)) return res.data;
+      return (res.data as DealsResponse).deals ?? [];
     },
   });
 
-  const deals = Array.isArray(data) ? data : data?.deals ?? [];
+  const deals: Deal[] = data ?? [];
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -43,11 +52,19 @@ export default function DealsScreen() {
 
   return (
     <View style={s.container}>
-      <ScreenHeader title="All Deals" subtitle="Group buying deals in Kuwait" />
+      <ScreenHeader
+        title="All Deals"
+        subtitle="Group buying deals in Kuwait"
+      />
       <FlatList
         data={deals}
-        keyExtractor={(item: any) => String(item.id)}
-        renderItem={({ item }) => <DealCard deal={item} onPress={() => {}} />}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => (
+          <DealCard
+            deal={item}
+            onPress={() => router.push(`/deal/${item.id}` as Href)}
+          />
+        )}
         contentContainerStyle={s.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -59,11 +76,14 @@ export default function DealsScreen() {
         }
         ListEmptyComponent={
           isLoading ? null : (
-            <EmptyState icon="pricetag-outline" message="No active deals right now.\nCheck back soon!" />
+            <EmptyState
+              icon="pricetag-outline"
+              message="No active deals right now.{'\n'}Check back soon!"
+            />
           )
         }
         ListFooterComponent={<View style={s.bottomPad} />}
-        scrollEnabled={!!deals.length}
+        scrollEnabled
       />
     </View>
   );

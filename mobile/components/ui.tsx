@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
   TextInputProps,
+  ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,6 +69,7 @@ interface PrimaryButtonProps {
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'outline';
+  style?: ViewStyle;
 }
 
 export function PrimaryButton({
@@ -76,6 +78,7 @@ export function PrimaryButton({
   loading,
   disabled,
   variant = 'primary',
+  style,
 }: PrimaryButtonProps) {
   const colors = useColors();
 
@@ -109,7 +112,7 @@ export function PrimaryButton({
 
   return (
     <TouchableOpacity
-      style={s.btn}
+      style={[s.btn, style]}
       onPress={async () => {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();

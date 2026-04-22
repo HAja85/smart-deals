@@ -16,8 +16,15 @@ import * as Haptics from 'expo-haptics';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { EmptyState, ScreenHeader, PrimaryButton } from '@/components/ui';
+import type { Cart, CartItem } from '@/types/models';
 
-function CartItem({ item, onRemove }: { item: any; onRemove: (dealId: number) => void }) {
+function CartItemRow({
+  item,
+  onRemove,
+}: {
+  item: CartItem;
+  onRemove: (dealId: number) => void;
+}) {
   const colors = useColors();
 
   const s = StyleSheet.create({
@@ -48,33 +55,33 @@ function CartItem({ item, onRemove }: { item: any; onRemove: (dealId: number) =>
       marginBottom: 8,
     },
     priceRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    price: {
-      fontSize: 16,
-      fontFamily: 'Inter_700Bold',
-      color: colors.primary,
-    },
-    qty: {
-      fontSize: 13,
-      fontFamily: 'Inter_400Regular',
-      color: colors.secondary,
-    },
+    price: { fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.primary },
+    qty: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.secondary },
     removeBtn: { padding: 8 },
   });
 
-  const price = (item.price_per_unit || 0).toFixed(3);
-  const total = ((item.price_per_unit || 0) * (item.quantity || 1)).toFixed(3);
+  const unitPrice = Number(item.price_per_unit ?? 0);
+  const qty = item.quantity ?? 1;
+  const total = (unitPrice * qty).toFixed(3);
 
   return (
     <View style={s.card}>
       <View style={s.info}>
-        <Text style={s.title} numberOfLines={1}>{item.product_title ?? 'Deal'}</Text>
+        <Text style={s.title} numberOfLines={1}>
+          {item.product_title ?? 'Deal'}
+        </Text>
         <Text style={s.brand}>{item.product_brand ?? ''}</Text>
         <View style={s.priceRow}>
           <Text style={s.price}>KWD {total}</Text>
-          <Text style={s.qty}>× {item.quantity} @ {price}</Text>
+          <Text style={s.qty}>
+            × {qty} @ {unitPrice.toFixed(3)}
+          </Text>
         </View>
       </View>
-      <TouchableOpacity style={s.removeBtn} onPress={() => onRemove(item.deal_id)}>
+      <TouchableOpacity
+        style={s.removeBtn}
+        onPress={() => onRemove(item.deal_id)}
+      >
         <Ionicons name="trash-outline" size={20} color="#EF4444" />
       </TouchableOpacity>
     </View>
@@ -87,10 +94,10 @@ export default function CartScreen() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data: cart, isLoading, refetch } = useQuery({
+  const { data: cart, isLoading, refetch } = useQuery<Cart>({
     queryKey: ['/api/cart'],
     queryFn: async () => {
-      const res = await api.get('/cart');
+      const res = await api.get<Cart>('/cart');
       return res.data;
     },
   });
@@ -113,7 +120,22 @@ export default function CartScreen() {
   const handleRemove = (dealId: number) => {
     Alert.alert('Remove Item', 'Remove this deal from your cart?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeMutation.mutate(dealId) },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => removeMutation.mutate(dealId),
+      },
+    ]);
+  };
+
+  const handleClear = () => {
+    Alert.alert('Clear Cart', 'Remove all items from cart?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: () => clearMutation.mutate(),
+      },
     ]);
   };
 
@@ -123,8 +145,8 @@ export default function CartScreen() {
     setRefreshing(false);
   };
 
-  const items: any[] = cart?.items ?? [];
-  const total = cart?.cart_total ?? 0;
+  const items: CartItem[] = cart?.items ?? [];
+  const total = Number(cart?.cart_total ?? 0);
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -134,7 +156,8 @@ export default function CartScreen() {
       borderTopWidth: 1,
       borderTopColor: colors.border,
       padding: 20,
-      paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : 20,
+      paddingBottom:
+        Platform.OS === 'ios' ? insets.bottom + 4 : 20,
     },
     totalRow: {
       flexDirection: 'row',
@@ -152,7 +175,9 @@ export default function CartScreen() {
       fontFamily: 'Inter_700Bold',
       color: colors.foreground,
     },
-    bottomPad: { height: Platform.OS === 'web' ? 34 : insets.bottom + 16 },
+    bottomPad: {
+      height: Platform.OS === 'web' ? 34 : insets.bottom + 16,
+    },
   });
 
   return (
@@ -160,35 +185,43 @@ export default function CartScreen() {
       <ScreenHeader
         title="My Cart"
         subtitle={items.length ? `${items.length} deal${items.length > 1 ? 's' : ''}` : undefined}
-        action={items.length ? { icon: 'trash-outline', onPress: () => {
-          Alert.alert('Clear Cart', 'Remove all items from cart?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Clear', style: 'destructive', onPress: () => clearMutation.mutate() },
-          ]);
-        }} : undefined}
+        action={
+          items.length
+            ? { icon: 'trash-outline', onPress: handleClear }
+            : undefined
+        }
       />
       <FlatList
         data={items}
-        keyExtractor={(item: any) => String(item.deal_id)}
-        renderItem={({ item }) => <CartItem item={item} onRemove={handleRemove} />}
+        keyExtractor={(item) => String(item.deal_id)}
+        renderItem={({ item }) => (
+          <CartItemRow item={item} onRemove={handleRemove} />
+        )}
         contentContainerStyle={s.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing || isLoading} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing || isLoading}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
         }
         ListEmptyComponent={
           isLoading ? null : (
-            <EmptyState icon="bag-outline" message="Your cart is empty.\nAdd deals to get started!" />
+            <EmptyState
+              icon="bag-outline"
+              message="Your cart is empty.{'\n'}Add deals to get started!"
+            />
           )
         }
         ListFooterComponent={<View style={s.bottomPad} />}
-        scrollEnabled={!!items.length}
+        scrollEnabled
       />
       {items.length > 0 && (
         <View style={s.footer}>
           <View style={s.totalRow}>
             <Text style={s.totalLabel}>Total</Text>
-            <Text style={s.totalValue}>KWD {Number(total).toFixed(3)}</Text>
+            <Text style={s.totalValue}>KWD {total.toFixed(3)}</Text>
           </View>
           <PrimaryButton label="Proceed to Checkout" onPress={() => {}} />
         </View>

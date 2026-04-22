@@ -7,22 +7,27 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { api, storeToken } from '@/services/api';
+import { api } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useColors } from '@/hooks/useColors';
 import { InputField, PrimaryButton } from '@/components/ui';
+import { getApiError } from '@/types/models';
 
 type Step = 1 | 2 | 3;
+
+interface OtpResponse {
+  otp?: string;
+}
 
 export default function SignupScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { signup } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
@@ -37,8 +42,6 @@ export default function SignupScreen() {
   const [demoEmailOtp, setDemoEmailOtp] = useState('');
   const [demoMobileOtp, setDemoMobileOtp] = useState('');
 
-  const { login } = useAuth();
-
   const handleStep1 = async () => {
     if (!name.trim() || !email.trim() || !mobile.trim() || !password.trim()) {
       setError('All fields are required.');
@@ -52,15 +55,17 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       const [emailRes, mobileRes] = await Promise.all([
-        api.post('/auth/send-email-otp', { target: email.trim().toLowerCase() }),
-        api.post('/auth/send-mobile-otp', { target: mobile.trim() }),
+        api.post<OtpResponse>('/auth/send-email-otp', {
+          target: email.trim().toLowerCase(),
+        }),
+        api.post<OtpResponse>('/auth/send-mobile-otp', { target: mobile.trim() }),
       ]);
-      setDemoEmailOtp(emailRes.data.otp || '');
-      setDemoMobileOtp(mobileRes.data.otp || '');
+      setDemoEmailOtp(emailRes.data.otp ?? '');
+      setDemoMobileOtp(mobileRes.data.otp ?? '');
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setStep(2);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Failed to send OTPs. Try again.');
+    } catch (err: unknown) {
+      setError(getApiError(err, 'Failed to send OTPs. Try again.'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +88,7 @@ export default function SignupScreen() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.post('/auth/register', {
+      await signup({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         mobile_number: mobile.trim(),
@@ -91,12 +96,9 @@ export default function SignupScreen() {
         email_otp: emailOtp.trim(),
         mobile_otp: mobileOtp.trim(),
       });
-      const { token } = res.data;
-      await storeToken(token);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await login(email.trim().toLowerCase(), password);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Registration failed. Try again.');
+    } catch (err: unknown) {
+      setError(getApiError(err, 'Registration failed. Try again.'));
     } finally {
       setLoading(false);
     }
@@ -239,10 +241,34 @@ export default function SignupScreen() {
               </View>
             ) : null}
 
-            <InputField label="Full Name" value={name} onChangeText={setName} placeholder="Ahmad Al-Mutairi" />
-            <InputField label="Email" value={email} onChangeText={setEmail} placeholder="you@email.com" keyboardType="email-address" autoCapitalize="none" />
-            <InputField label="Mobile Number" value={mobile} onChangeText={setMobile} placeholder="+965 xxxx xxxx" keyboardType="phone-pad" />
-            <InputField label="Password" value={password} onChangeText={setPassword} placeholder="Min 6 characters" secureTextEntry />
+            <InputField
+              label="Full Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Ahmad Al-Mutairi"
+            />
+            <InputField
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <InputField
+              label="Mobile Number"
+              value={mobile}
+              onChangeText={setMobile}
+              placeholder="+965 xxxx xxxx"
+              keyboardType="phone-pad"
+            />
+            <InputField
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Min 6 characters"
+              secureTextEntry
+            />
 
             <PrimaryButton label="Send OTPs" onPress={handleStep1} loading={loading} />
 

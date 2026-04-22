@@ -8,12 +8,21 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useColors } from '@/hooks/useColors';
+import type { Deal, Order } from '@/types/models';
+
+interface DealsResponse {
+  deals?: Deal[];
+}
+
+interface OrdersResponse {
+  orders?: Order[];
+}
 
 interface StatCardProps {
   label: string;
@@ -45,8 +54,17 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
       alignItems: 'center',
       marginBottom: 10,
     },
-    value: { fontSize: 24, fontFamily: 'Inter_700Bold', color: colors.foreground },
-    label: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginTop: 2 },
+    value: {
+      fontSize: 24,
+      fontFamily: 'Inter_700Bold',
+      color: colors.foreground,
+    },
+    label: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: colors.secondary,
+      marginTop: 2,
+    },
   });
 
   return (
@@ -66,31 +84,33 @@ export default function SupplierHome() {
   const router = useRouter();
   const { user } = useAuth();
 
-  const { data: deals } = useQuery({
+  const { data: dealsData } = useQuery<Deal[]>({
     queryKey: ['/api/deals/my-deals'],
     queryFn: async () => {
-      const res = await api.get('/deals/my-deals');
-      return res.data;
+      const res = await api.get<Deal[] | DealsResponse>('/deals/my-deals');
+      if (Array.isArray(res.data)) return res.data;
+      return (res.data as DealsResponse).deals ?? [];
     },
   });
 
-  const { data: orders } = useQuery({
+  const { data: ordersData } = useQuery<Order[]>({
     queryKey: ['/api/orders/supplier-orders'],
     queryFn: async () => {
-      const res = await api.get('/orders/supplier-orders');
-      return res.data;
+      const res = await api.get<Order[] | OrdersResponse>('/orders/supplier-orders');
+      if (Array.isArray(res.data)) return res.data;
+      return (res.data as OrdersResponse).orders ?? [];
     },
   });
 
-  const dealsList = Array.isArray(deals) ? deals : deals?.deals ?? [];
-  const ordersList = Array.isArray(orders) ? orders : orders?.orders ?? [];
+  const dealsList: Deal[] = dealsData ?? [];
+  const ordersList: Order[] = ordersData ?? [];
 
-  const activeDeals = dealsList.filter((d: any) => d.status === 'Active').length;
-  const successDeals = dealsList.filter((d: any) => d.status === 'Successful').length;
+  const activeDeals = dealsList.filter((d) => d.status === 'Active').length;
+  const successDeals = dealsList.filter((d) => d.status === 'Successful').length;
   const totalOrders = ordersList.length;
   const revenue = ordersList
-    .filter((o: any) => o.payment_status === 'Captured')
-    .reduce((sum: number, o: any) => sum + Number(o.total_amount ?? 0), 0);
+    .filter((o) => o.payment_status === 'Captured')
+    .reduce((sum, o) => sum + Number(o.total_amount ?? 0), 0);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
 
@@ -102,8 +122,17 @@ export default function SupplierHome() {
       paddingHorizontal: 20,
       paddingBottom: 24,
     },
-    greeting: { fontSize: 13, fontFamily: 'Inter_400Regular', color: 'rgba(255,255,255,0.8)' },
-    name: { fontSize: 22, fontFamily: 'Inter_700Bold', color: '#FFFFFF', marginBottom: 4 },
+    greeting: {
+      fontSize: 13,
+      fontFamily: 'Inter_400Regular',
+      color: 'rgba(255,255,255,0.8)',
+    },
+    name: {
+      fontSize: 22,
+      fontFamily: 'Inter_700Bold',
+      color: '#FFFFFF',
+      marginBottom: 4,
+    },
     roleBadge: {
       alignSelf: 'flex-start',
       backgroundColor: colors.accent,
@@ -114,7 +143,12 @@ export default function SupplierHome() {
     roleText: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10, marginTop: 20 },
     section: { paddingHorizontal: 20, marginTop: 24 },
-    sectionTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 14 },
+    sectionTitle: {
+      fontSize: 17,
+      fontFamily: 'Inter_700Bold',
+      color: colors.foreground,
+      marginBottom: 14,
+    },
     quickActions: { flexDirection: 'row', gap: 12 },
     actionBtn: {
       flex: 1,
@@ -129,7 +163,11 @@ export default function SupplierHome() {
       shadowRadius: 4,
       elevation: 2,
     },
-    actionLabel: { fontSize: 13, fontFamily: 'Inter_500Medium', color: colors.foreground },
+    actionLabel: {
+      fontSize: 13,
+      fontFamily: 'Inter_500Medium',
+      color: colors.foreground,
+    },
     bottomPad: { height: Platform.OS === 'web' ? 34 : insets.bottom + 24 },
   });
 
@@ -145,24 +183,53 @@ export default function SupplierHome() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={s.statsGrid}>
-          <StatCard label="Active Deals" value={activeDeals} icon="flash" color={colors.primary} />
-          <StatCard label="Successful" value={successDeals} icon="checkmark-circle" color={colors.success} />
-          <StatCard label="Orders" value={totalOrders} icon="receipt" color={colors.accent} />
-          <StatCard label="Revenue (KWD)" value={revenue.toFixed(3)} icon="cash" color="#8B5CF6" />
+          <StatCard
+            label="Active Deals"
+            value={activeDeals}
+            icon="flash"
+            color={colors.primary}
+          />
+          <StatCard
+            label="Successful"
+            value={successDeals}
+            icon="checkmark-circle"
+            color={colors.success}
+          />
+          <StatCard
+            label="Orders"
+            value={totalOrders}
+            icon="receipt"
+            color={colors.accent}
+          />
+          <StatCard
+            label="Revenue (KWD)"
+            value={revenue.toFixed(3)}
+            icon="cash"
+            color="#8B5CF6"
+          />
         </View>
 
         <View style={s.section}>
           <Text style={s.sectionTitle}>Quick Actions</Text>
           <View style={s.quickActions}>
-            <TouchableOpacity style={s.actionBtn} onPress={() => router.push('/(supplier)/products' as any)}>
+            <TouchableOpacity
+              style={s.actionBtn}
+              onPress={() => router.push('/(supplier)/products' as Href)}
+            >
               <Ionicons name="add-circle" size={28} color={colors.primary} />
               <Text style={s.actionLabel}>Add Product</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} onPress={() => router.push('/(supplier)/deals' as any)}>
+            <TouchableOpacity
+              style={s.actionBtn}
+              onPress={() => router.push('/(supplier)/deals' as Href)}
+            >
               <Ionicons name="pricetag" size={28} color={colors.accent} />
               <Text style={s.actionLabel}>Create Deal</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} onPress={() => router.push('/(supplier)/dashboard' as any)}>
+            <TouchableOpacity
+              style={s.actionBtn}
+              onPress={() => router.push('/(supplier)/dashboard' as Href)}
+            >
               <Ionicons name="bar-chart" size={28} color="#8B5CF6" />
               <Text style={s.actionLabel}>Reports</Text>
             </TouchableOpacity>

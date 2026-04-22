@@ -8,15 +8,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
+import type { Deal } from '@/types/models';
 
 interface DealCardProps {
-  deal: any;
+  deal: Deal;
   horizontal?: boolean;
   showStatus?: boolean;
   onPress: () => void;
 }
 
-function useCountdown(endTime: string | null) {
+function useCountdown(endTime: string | null | undefined): string {
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
@@ -32,9 +33,9 @@ function useCountdown(endTime: string | null) {
         return;
       }
 
-      const days = Math.floor(diff / 86400000);
-      const hours = Math.floor((diff % 86400000) / 3600000);
-      const mins = Math.floor((diff % 3600000) / 60000);
+      const days = Math.floor(diff / 86_400_000);
+      const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+      const mins = Math.floor((diff % 3_600_000) / 60_000);
 
       if (days > 0) {
         setTimeLeft(`${days}d ${hours}h`);
@@ -46,7 +47,7 @@ function useCountdown(endTime: string | null) {
     };
 
     calc();
-    const timer = setInterval(calc, 60000);
+    const timer = setInterval(calc, 60_000);
     return () => clearInterval(timer);
   }, [endTime]);
 
@@ -61,7 +62,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProps) {
   const colors = useColors();
-  const timeLeft = useCountdown(deal.end_time ?? null);
+  const timeLeft = useCountdown(deal.end_time);
 
   const currentQty = deal.current_quantity ?? 0;
   const targetQty = deal.target_quantity ?? 1;
@@ -77,8 +78,9 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
   const title = deal.product_title ?? deal.title ?? 'Deal';
   const brand = deal.product_brand ?? deal.brand ?? '';
   const image = deal.product_image ?? deal.image ?? null;
-
   const statusColor = STATUS_COLORS[deal.status] ?? colors.secondary;
+
+  const progressColor = isHot ? colors.hot : isAlmostFull ? colors.almostFull : colors.primary;
 
   if (horizontal) {
     const s = StyleSheet.create({
@@ -151,7 +153,7 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
                 <Text style={s.badgeText}>HOT</Text>
               </View>
             )}
-            {isAlmostFull && (
+            {isAlmostFull && !isHot && (
               <View style={[s.badge, { backgroundColor: colors.almostFull }]}>
                 <Text style={s.badgeText}>ALMOST FULL</Text>
               </View>
@@ -169,16 +171,11 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
             <View
               style={[
                 s.progressFill,
-                {
-                  width: `${progress * 100}%`,
-                  backgroundColor: isHot ? colors.hot : isAlmostFull ? colors.almostFull : colors.primary,
-                },
+                { width: `${progress * 100}%`, backgroundColor: progressColor },
               ]}
             />
           </View>
-          <Text style={s.progressText}>
-            {currentQty}/{targetQty} ordered
-          </Text>
+          <Text style={s.progressText}>{currentQty}/{targetQty} ordered</Text>
         </View>
       </TouchableOpacity>
     );
@@ -207,7 +204,11 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
     },
     image: { width: 72, height: 72, borderRadius: 10 },
     content: { flex: 1 },
-    topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    topRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+    },
     title: {
       flex: 1,
       fontSize: 15,
@@ -225,10 +226,21 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
       borderRadius: 6,
     },
     timerText: { fontSize: 10, fontFamily: 'Inter_500Medium', color: colors.secondary },
-    brand: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginTop: 2, marginBottom: 8 },
+    brand: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: colors.secondary,
+      marginTop: 2,
+      marginBottom: 8,
+    },
     priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     price: { fontSize: 18, fontFamily: 'Inter_700Bold', color: colors.primary },
-    originalPrice: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, textDecorationLine: 'line-through' },
+    originalPrice: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: colors.secondary,
+      textDecorationLine: 'line-through',
+    },
     progressSection: { paddingHorizontal: 14, paddingBottom: 14 },
     progressBg: {
       height: 6,
@@ -332,14 +344,7 @@ export function DealCard({ deal, horizontal, showStatus, onPress }: DealCardProp
           <View
             style={[
               s.progressFill,
-              {
-                width: `${progress * 100}%`,
-                backgroundColor: isHot
-                  ? colors.hot
-                  : isAlmostFull
-                  ? colors.almostFull
-                  : colors.primary,
-              },
+              { width: `${progress * 100}%`, backgroundColor: progressColor },
             ]}
           />
         </View>

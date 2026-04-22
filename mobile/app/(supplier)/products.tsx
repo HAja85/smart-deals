@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { useColors } from '@/hooks/useColors';
 import { EmptyState, ScreenHeader } from '@/components/ui';
+import type { Product } from '@/types/models';
 
-function ProductCard({ product }: { product: any }) {
+function ProductCard({ product }: { product: Product }) {
   const colors = useColors();
   const s = StyleSheet.create({
     card: {
@@ -33,8 +41,17 @@ function ProductCard({ product }: { product: any }) {
     },
     iconText: { fontSize: 22 },
     info: { flex: 1 },
-    title: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: colors.foreground },
-    meta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.secondary, marginTop: 2 },
+    title: {
+      fontSize: 15,
+      fontFamily: 'Inter_600SemiBold',
+      color: colors.foreground,
+    },
+    meta: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: colors.secondary,
+      marginTop: 2,
+    },
     categoryBadge: {
       alignSelf: 'flex-start',
       marginTop: 6,
@@ -43,7 +60,11 @@ function ProductCard({ product }: { product: any }) {
       borderRadius: 6,
       backgroundColor: colors.primary + '15',
     },
-    categoryText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: colors.primary },
+    categoryText: {
+      fontSize: 11,
+      fontFamily: 'Inter_500Medium',
+      color: colors.primary,
+    },
   });
 
   return (
@@ -52,8 +73,12 @@ function ProductCard({ product }: { product: any }) {
         <Text style={s.iconText}>📦</Text>
       </View>
       <View style={s.info}>
-        <Text style={s.title} numberOfLines={1}>{product.title}</Text>
-        <Text style={s.meta}>{product.brand} · {product.unit}</Text>
+        <Text style={s.title} numberOfLines={1}>
+          {product.title}
+        </Text>
+        <Text style={s.meta}>
+          {product.brand} · {product.unit}
+        </Text>
         <View style={s.categoryBadge}>
           <Text style={s.categoryText}>{product.category}</Text>
         </View>
@@ -67,15 +92,15 @@ export default function ProductsScreen() {
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery<Product[]>({
     queryKey: ['/api/products/my-products'],
     queryFn: async () => {
-      const res = await api.get('/products/my-products');
+      const res = await api.get<Product[]>('/products/my-products');
       return res.data;
     },
   });
 
-  const products = Array.isArray(data) ? data : [];
+  const products: Product[] = Array.isArray(data) ? data : [];
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -91,21 +116,33 @@ export default function ProductsScreen() {
 
   return (
     <View style={s.container}>
-      <ScreenHeader title="My Products" subtitle={products.length ? `${products.length} products` : undefined} />
+      <ScreenHeader
+        title="My Products"
+        subtitle={products.length ? `${products.length} products` : undefined}
+      />
       <FlatList
         data={products}
-        keyExtractor={(item: any) => String(item.id)}
+        keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => <ProductCard product={item} />}
         contentContainerStyle={s.list}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing || isLoading} onRefresh={onRefresh} tintColor={colors.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing || isLoading}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
         ListEmptyComponent={
           isLoading ? null : (
-            <EmptyState icon="cube-outline" message="No products yet.\nAdd your first product!" />
+            <EmptyState
+              icon="cube-outline"
+              message="No products yet.{'\n'}Add your first product!"
+            />
           )
         }
         ListFooterComponent={<View style={s.bottomPad} />}
-        scrollEnabled={!!products.length}
+        scrollEnabled
       />
     </View>
   );

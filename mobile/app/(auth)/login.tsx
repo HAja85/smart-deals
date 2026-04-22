@@ -7,8 +7,6 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  Image,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { useColors } from '@/hooks/useColors';
 import { InputField, PrimaryButton } from '@/components/ui';
+import { getApiError } from '@/types/models';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -37,10 +36,8 @@ export default function LoginScreen() {
     try {
       await login(email.trim().toLowerCase(), password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.detail || 'Login failed. Please try again.';
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getApiError(err, 'Login failed. Please try again.'));
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);

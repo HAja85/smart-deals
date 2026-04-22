@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   useFonts,
   Inter_400Regular,
@@ -15,6 +15,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
+import type { NotificationData } from '@/types/models';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -48,33 +49,33 @@ function AuthGate() {
     const inSupplier = segments[0] === '(supplier)';
 
     if (!user) {
-      if (!inAuth) router.replace('/(auth)/login');
+      if (!inAuth) router.replace('/(auth)/login' as Href);
     } else if (user.role === 'supplier') {
-      if (!inSupplier) router.replace('/(supplier)');
+      if (!inSupplier) router.replace('/(supplier)' as Href);
     } else {
-      if (!inConsumer) router.replace('/(consumer)');
+      if (!inConsumer) router.replace('/(consumer)' as Href);
     }
   }, [user, isLoading, segments]);
 
-  const notificationResponseListener =
-    Notifications.useLastNotificationResponse();
+  const notificationResponse = Notifications.useLastNotificationResponse();
 
   useEffect(() => {
-    if (!notificationResponseListener || !user) return;
-    const data =
-      notificationResponseListener.notification.request.content.data as any;
-    if (data?.type === 'deal' && data?.deal_id) {
+    if (!notificationResponse || !user) return;
+    const data = notificationResponse.notification.request.content
+      .data as NotificationData;
+
+    if (data?.type === 'deal' && data?.deal_id != null) {
       if (user.role === 'consumer') {
-        router.push(`/(consumer)/deals` as any);
+        router.push(`/deal/${data.deal_id}` as Href);
       }
-    } else if (data?.type === 'order') {
+    } else if (data?.type === 'order' && data?.order_id != null) {
       if (user.role === 'consumer') {
-        router.push(`/(consumer)/orders` as any);
+        router.push(`/order/${data.order_id}` as Href);
       } else {
-        router.push(`/(supplier)/orders` as any);
+        router.push('/(supplier)/orders' as Href);
       }
     }
-  }, [notificationResponseListener]);
+  }, [notificationResponse, user]);
 
   if (isLoading) {
     return (
@@ -90,6 +91,24 @@ function AuthGate() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(consumer)" />
       <Stack.Screen name="(supplier)" />
+      <Stack.Screen
+        name="deal/[id]"
+        options={{
+          headerShown: true,
+          title: 'Deal Details',
+          headerTintColor: Colors.light.primary,
+          headerTitleStyle: { fontFamily: 'Inter_600SemiBold' },
+        }}
+      />
+      <Stack.Screen
+        name="order/[id]"
+        options={{
+          headerShown: true,
+          title: 'Order Details',
+          headerTintColor: Colors.light.primary,
+          headerTitleStyle: { fontFamily: 'Inter_600SemiBold' },
+        }}
+      />
     </Stack>
   );
 }
