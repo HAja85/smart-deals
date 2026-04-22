@@ -1,5 +1,5 @@
 import io
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -195,6 +195,30 @@ def generate_delivery_note(order: dict, deal: dict, product: dict, buyer: dict) 
     order_number = order.get("order_number") or f"ORD-{order.get('id', 0):06d}"
     qty = int(order.get("quantity") or 1)
 
+    est_delivery_date = "—"
+    try:
+        base_date = None
+        if deal.get("end_time"):
+            raw = deal["end_time"]
+            if isinstance(raw, str):
+                base_date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            elif isinstance(raw, datetime):
+                base_date = raw
+        if base_date is None and order.get("created_at"):
+            raw = order["created_at"]
+            if isinstance(raw, str):
+                base_date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            elif isinstance(raw, datetime):
+                base_date = raw
+        if base_date is not None:
+            if base_date.tzinfo is None:
+                base_date = base_date.replace(tzinfo=timezone.utc)
+            from_date = max(base_date, datetime.now(timezone.utc))
+            est = from_date + timedelta(days=5)
+            est_delivery_date = est.strftime("%d %b %Y")
+    except Exception:
+        pass
+
     elements = []
     elements.append(Paragraph(order_number, big))
     elements.append(HRFlowable(width="100%", thickness=2, color=BRAND_AMBER))
@@ -205,6 +229,7 @@ def generate_delivery_note(order: dict, deal: dict, product: dict, buyer: dict) 
         [Paragraph("Name", label_style), Paragraph(buyer.get("name") or "—", value_style)],
         [Paragraph("Mobile", label_style), Paragraph(order.get("mobile_number") or buyer.get("mobile_number") or "—", value_style)],
         [Paragraph("Address", label_style), Paragraph(order.get("delivery_address") or "—", value_style)],
+        [Paragraph("Est. Delivery", label_style), Paragraph(est_delivery_date, value_style)],
     ]
     rt = Table(recipient_data, colWidths=[35 * mm, A4[0] - 65 * mm])
     rt.setStyle(TableStyle([

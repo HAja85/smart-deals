@@ -568,9 +568,11 @@ def download_delivery_note(order_id: int, user=Depends(required_user)):
                 row[f] = float(row[f])
 
         order = {k: v.isoformat() if hasattr(v, "isoformat") else v for k, v in row.items()}
+        end_time_raw = row.get("end_time")
         deal = {
             "price_per_unit": row.get("price_per_unit"),
             "actual_price": row.get("actual_price"),
+            "end_time": end_time_raw.isoformat() if hasattr(end_time_raw, "isoformat") else end_time_raw,
         }
         product = {
             "title": row.get("product_title"),

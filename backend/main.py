@@ -170,6 +170,13 @@ def check_deal_statuses():
                         pass
                     cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
 
+        cur.execute("""
+            DELETE FROM cart_items ci
+            USING deals d
+            WHERE ci.deal_id = d.id
+              AND d.status <> 'Active'
+        """)
+
         conn.commit()
         cur.close()
         conn.close()

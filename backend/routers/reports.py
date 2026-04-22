@@ -23,19 +23,24 @@ def supplier_only(credentials: HTTPAuthorizationCredentials = Depends(security))
 
 @router.get("/supplier")
 def supplier_accounting_report(
-    from_date: str = Query(..., description="Start date YYYY-MM-DD"),
-    to_date: str = Query(..., description="End date YYYY-MM-DD"),
+    from_date: str = Query(..., alias="from", description="Start date YYYY-MM-DD"),
+    to_date: str = Query(..., alias="to", description="End date YYYY-MM-DD"),
     user=Depends(supplier_only),
 ):
-    """Generate and return a PDF accounting report for the supplier over a date range."""
+    """Generate and return a PDF accounting report for the supplier over a date range.
+    
+    Usage: GET /api/reports/supplier?from=2025-01-01&to=2025-12-31
+    """
     try:
         from_dt = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        to_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        to_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59, tzinfo=timezone.utc
+        )
     except ValueError:
         raise HTTPException(status_code=400, detail="Dates must be in YYYY-MM-DD format")
 
     if from_dt > to_dt:
-        raise HTTPException(status_code=400, detail="from_date must be before to_date")
+        raise HTTPException(status_code=400, detail="from must be before to")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -61,7 +66,7 @@ def supplier_accounting_report(
             WHERE d.seller_id = %s
               AND o.created_at >= %s
               AND o.created_at <= %s
-              AND o.payment_status IN ('Paid', 'Captured', 'Authorized')
+              AND o.payment_status IN ('Paid', 'Captured')
             ORDER BY o.created_at DESC
         """, (seller_id, from_dt, to_dt))
         orders = [dict(r) for r in cur.fetchall()]
