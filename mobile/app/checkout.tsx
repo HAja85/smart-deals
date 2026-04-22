@@ -102,20 +102,18 @@ export default function CheckoutScreen() {
   };
 
   const validateStep2 = () => {
-    if (Platform.OS !== 'web' && CardField) {
-      if (!cardComplete) {
-        setErrors({ card: 'Please complete your card details' });
-        return false;
-      }
-      return true;
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        'Mobile App Required',
+        'Please use the SmartDeals mobile app to complete your payment.'
+      );
+      return false;
     }
-    const e: Record<string, string> = {};
-    const num = webCardNumber.replace(/\s/g, '');
-    if (num.length < 14) e.cardNumber = 'Enter a valid card number';
-    if (!webCardExpiry.match(/^\d{2}\/\d{2}$/)) e.cardExpiry = 'Enter expiry as MM/YY';
-    if (webCardCvc.length < 3) e.cardCvc = 'Enter a valid CVC';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    if (!cardComplete) {
+      setErrors({ card: 'Please complete your card details' });
+      return false;
+    }
+    return true;
   };
 
   const handlePlaceOrder = async () => {
@@ -370,47 +368,23 @@ export default function CheckoutScreen() {
                 {errors.card ? <Text style={s.cardError}>{errors.card}</Text> : null}
               </>
             ) : (
-              <>
-                <View style={s.demoNote}>
-                  <Text style={s.demoNoteText}>
-                    Demo: Use card 4242 4242 4242 4242, any future expiry, any 3-digit CVC.
-                  </Text>
-                </View>
-                <InputField
-                  label="Card Number"
-                  value={webCardNumber}
-                  onChangeText={(t) => setWebCardNumber(formatCardNumber(t))}
-                  placeholder="4242 4242 4242 4242"
-                  keyboardType="number-pad"
-                  maxLength={19}
-                  error={errors.cardNumber}
-                />
-                <View style={s.row2}>
-                  <View style={{ flex: 1 }}>
-                    <InputField
-                      label="Expiry (MM/YY)"
-                      value={webCardExpiry}
-                      onChangeText={(t) => setWebCardExpiry(formatExpiry(t))}
-                      placeholder="12/26"
-                      keyboardType="number-pad"
-                      maxLength={5}
-                      error={errors.cardExpiry}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <InputField
-                      label="CVC"
-                      value={webCardCvc}
-                      onChangeText={(t) => setWebCardCvc(t.replace(/\D/g, '').slice(0, 4))}
-                      placeholder="123"
-                      keyboardType="number-pad"
-                      maxLength={4}
-                      secureTextEntry
-                      error={errors.cardCvc}
-                    />
-                  </View>
-                </View>
-              </>
+              <View style={{
+                backgroundColor: colors.muted,
+                borderRadius: 12,
+                padding: 20,
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 4,
+              }}>
+                <Ionicons name="phone-portrait-outline" size={36} color={colors.primary} />
+                <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, textAlign: 'center' }}>
+                  Mobile App Required for Payment
+                </Text>
+                <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.secondary, textAlign: 'center', lineHeight: 20 }}>
+                  Secure Stripe payment confirmation requires the SmartDeals mobile app.
+                  Download the app to complete your purchase.
+                </Text>
+              </View>
             )}
 
             <PrimaryButton

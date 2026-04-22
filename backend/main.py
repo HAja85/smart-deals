@@ -134,7 +134,8 @@ def check_deal_statuses():
                                   {"type": "deal", "deal_id": deal["id"]})
                     except Exception as push_err:
                         print(f"[scheduler] Push dispatch failed for deal {deal['id']} (success): {push_err}")
-                    cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
+                    # Cart items for this deal are left for the client to remove
+                    # via the 3-second expired-banner auto-dismiss in the mobile app.
                 else:
                     cur.execute("UPDATE deals SET status = 'Failed' WHERE id = %s", (deal["id"],))
                     cur.execute(
@@ -171,14 +172,8 @@ def check_deal_statuses():
                                   {"type": "deal", "deal_id": deal["id"]})
                     except Exception as push_err:
                         print(f"[scheduler] Push dispatch failed for deal {deal['id']} (failed): {push_err}")
-                    cur.execute("DELETE FROM cart_items WHERE deal_id = %s", (deal["id"],))
-
-        cur.execute("""
-            DELETE FROM cart_items ci
-            USING deals d
-            WHERE ci.deal_id = d.id
-              AND d.status <> 'Active'
-        """)
+                    # Cart items for this deal are left in DB with is_expired=True
+                    # so the mobile client can show the 3-second expired banner before removing them.
 
         conn.commit()
         cur.close()
