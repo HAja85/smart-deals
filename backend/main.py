@@ -36,6 +36,31 @@ def check_deal_statuses():
         cur = conn.cursor()
         now = datetime.now(timezone.utc)
 
+        # Clean up stale Pending checkout orders (created > 30 min ago without confirmation).
+        # This handles crashes/network drops between /cart/checkout and /cart/confirm-checkout.
+        cur.execute("""
+            SELECT id, deal_id, quantity, stripe_payment_intent_id
+            FROM orders
+            WHERE payment_status = 'Pending'
+              AND created_at < NOW() - INTERVAL '30 minutes'
+        """)
+        stale_orders = [dict(r) for r in cur.fetchall()]
+        if stale_orders:
+            stale_ids = [o["id"] for o in stale_orders]
+            stale_ph = ",".join(["%s"] * len(stale_ids))
+            cur.execute(f"UPDATE orders SET payment_status = 'Cancelled' WHERE id IN ({stale_ph})", stale_ids)
+            for o in stale_orders:
+                if o.get("stripe_payment_intent_id"):
+                    try:
+                        payment_service.cancel_payment(o["stripe_payment_intent_id"])
+                    except Exception:
+                        pass
+                cur.execute(
+                    "UPDATE deals SET current_quantity = GREATEST(0, current_quantity - %s) WHERE id = %s",
+                    (o["quantity"], o["deal_id"]),
+                )
+            print(f"[scheduler] Cancelled {len(stale_orders)} stale Pending orders")
+
         cur.execute("SELECT * FROM deals WHERE status = 'Upcoming'")
         upcoming_deals = cur.fetchall()
         for deal in upcoming_deals:
@@ -96,7 +121,12 @@ def check_deal_statuses():
                         )
 
             if now >= end_time:
-                if deal["current_quantity"] >= deal["target_quantity"]:
+                cur.execute(
+                    "SELECT COALESCE(SUM(quantity), 0) AS confirmed_qty FROM orders WHERE deal_id = %s AND payment_status IN ('Authorized', 'Captured')",
+                    (deal["id"],)
+                )
+                confirmed_qty = int(dict(cur.fetchone())["confirmed_qty"])
+                if confirmed_qty >= deal["target_quantity"]:
                     cur.execute("UPDATE deals SET status = 'Successful' WHERE id = %s", (deal["id"],))
                     cur.execute(
                         "SELECT id, stripe_payment_intent_id, user_id FROM orders WHERE deal_id = %s AND payment_status = 'Authorized'",
