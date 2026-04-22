@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, type Href, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,6 +66,12 @@ export default function ConsumerHome() {
       return res.data;
     },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchTrending();
+    }, [refetchTrending])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
