@@ -122,20 +122,30 @@ export default function CheckoutScreen() {
     if (!validateStep2()) return;
     setIsPlacingOrder(true);
 
+    let createdOrderIds: number[] | null = null;
+
+    const rollbackOrders = async () => {
+      if (createdOrderIds?.length) {
+        await api.post('/cart/cancel-checkout', { order_ids: createdOrderIds }).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
+        createdOrderIds = null;
+      }
+    };
+
     try {
       const checkoutRes = await api.post<CartCheckoutResponse>('/cart/checkout', {
         delivery_address: address.trim(),
         mobile_number: mobile.trim(),
       });
       const { order_ids, stripe_client_secret, orders } = checkoutRes.data;
+      createdOrderIds = order_ids;
 
       if (stripe_client_secret && Platform.OS !== 'web' && CardField) {
         const { error } = await confirmPayment(stripe_client_secret, {
           paymentMethodType: 'Card',
         });
         if (error) {
-          await api.post('/cart/cancel-checkout', { order_ids }).catch(() => {});
-          queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
+          await rollbackOrders();
           setIsPlacingOrder(false);
           Alert.alert(
             'Payment Failed',
@@ -149,6 +159,7 @@ export default function CheckoutScreen() {
       if (!confirmRes.data?.confirmed_order_ids?.length) {
         throw new Error('Payment verification failed. Please contact support.');
       }
+      createdOrderIds = null;
 
       queryClient.invalidateQueries({ queryKey: ['/api/cart'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-orders'] });
@@ -161,6 +172,7 @@ export default function CheckoutScreen() {
         router.replace('/(consumer)/orders' as Href);
       }
     } catch (err: unknown) {
+      await rollbackOrders();
       Alert.alert('Order Failed', getApiError(err, 'Failed to place order. Please try again.'));
     } finally {
       setIsPlacingOrder(false);

@@ -61,8 +61,9 @@ class CartUpdate(BaseModel):
 
 @router.get("")
 def get_cart(user=Depends(consumer_only)):
-    """Return all active cart items for the logged-in consumer.
-    Items whose deal is no longer Active are silently excluded."""
+    """Return cart items for the logged-in consumer.
+    Active items (orderable) and expired/ended items (shown with warning banner
+    for client-driven auto-removal) are both returned."""
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -87,21 +88,22 @@ def get_cart(user=Depends(consumer_only)):
                 p.brand AS product_brand,
                 p.unit AS product_unit,
                 p.category AS product_category,
-                p.seller_name
+                p.seller_name,
+                (d.status <> 'Active' OR d.end_time < NOW()) AS is_expired
             FROM cart_items ci
             JOIN deals d ON ci.deal_id = d.id
             JOIN products p ON d.product_id = p.id
             WHERE ci.user_id = %s
-              AND d.status = 'Active'
-            ORDER BY ci.added_at DESC
+            ORDER BY is_expired ASC, ci.added_at DESC
         """, (user_id,))
         rows = cur.fetchall()
         items = [_format_cart_item(dict(r)) for r in rows]
 
-        cart_total = sum(i.get("line_total", 0) for i in items)
+        active_items = [i for i in items if not i.get("is_expired")]
+        cart_total = sum(i.get("line_total", 0) for i in active_items)
         return {
             "items": items,
-            "item_count": len(items),
+            "item_count": len(active_items),
             "cart_total": round(cart_total, 3),
         }
     finally:

@@ -81,6 +81,7 @@ export interface CartItem {
   product_unit?: string;
   deal_status?: string;
   end_time?: string;
+  is_expired?: boolean;
   line_total?: number;
   discount_percent?: number;
   progress_percent?: number;

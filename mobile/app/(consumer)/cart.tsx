@@ -87,8 +87,17 @@ function CartItemRow({
 
   const now = Date.now();
   const isExpired =
+    item.is_expired === true ||
     (item.deal_status != null && item.deal_status !== 'Active') ||
     (item.end_time != null && new Date(item.end_time).getTime() < now);
+
+  useEffect(() => {
+    if (!isExpired) return;
+    const timer = setTimeout(() => {
+      onRemove(item.deal_id, true);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isExpired]);
 
   const unitPrice = Number(item.price_per_unit ?? 0);
   const qty = item.quantity ?? 1;
@@ -158,9 +167,9 @@ function CartItemRow({
         {isExpired && (
           <View style={s.expiredBanner}>
             <Ionicons name="alert-circle" size={14} color="#DC2626" />
-            <Text style={s.expiredText}>Deal ended — tap to remove</Text>
+            <Text style={s.expiredText}>Deal ended — removing shortly</Text>
             <TouchableOpacity onPress={() => onRemove(item.deal_id, true)}>
-              <Text style={s.expiredDismiss}>Remove</Text>
+              <Text style={s.expiredDismiss}>Remove now</Text>
             </TouchableOpacity>
           </View>
         )}
