@@ -49,13 +49,15 @@ function AuthGate() {
     const inAuth = segments[0] === '(auth)';
     const inConsumer = segments[0] === '(consumer)';
     const inSupplier = segments[0] === '(supplier)';
+    // Routes accessible to authenticated users regardless of role group
+    const inShared = ['deal', 'order', 'checkout'].includes(segments[0] as string);
 
     if (!user) {
       if (!inAuth) router.replace('/(auth)/login' as Href);
     } else if (user.role === 'supplier') {
-      if (!inSupplier) router.replace('/(supplier)' as Href);
+      if (!inSupplier && !inShared) router.replace('/(supplier)' as Href);
     } else {
-      if (!inConsumer) router.replace('/(consumer)' as Href);
+      if (!inConsumer && !inShared) router.replace('/(consumer)' as Href);
     }
   }, [user, isLoading, segments]);
 
