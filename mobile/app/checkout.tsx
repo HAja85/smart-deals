@@ -94,7 +94,13 @@ export default function CheckoutScreen() {
     },
   });
 
-  const items: CartItem[] = cartData?.items ?? [];
+  const now = Date.now();
+  const items: CartItem[] = (cartData?.items ?? []).filter(
+    (i) =>
+      !i.is_expired &&
+      (i.deal_status == null || i.deal_status === 'Active') &&
+      (!i.end_time || new Date(i.end_time).getTime() >= now)
+  );
   const total = Number(cartData?.cart_total ?? 0);
 
   const validateStep1 = () => {

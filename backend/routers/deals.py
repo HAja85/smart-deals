@@ -106,8 +106,11 @@ def get_deals(
         params: list = []
 
         if status:
-            conditions.append("d.status = %s")
-            params.append(status)
+            if status == "Completed":
+                conditions.append("d.status IN ('Successful', 'Failed')")
+            else:
+                conditions.append("d.status = %s")
+                params.append(status)
 
         if search and search.strip():
             conditions.append("(p.title ILIKE %s OR p.brand ILIKE %s OR p.category ILIKE %s)")

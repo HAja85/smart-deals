@@ -23,12 +23,12 @@ import type { Deal } from '@/types/models';
 
 const CATEGORIES = ['All', 'Rice', 'Oil', 'Dairy', 'Water', 'Snacks', 'Cleaning', 'Frozen', 'Eggs', 'Beverages'];
 
-type TabMode = 'Active' | 'Upcoming' | 'Successful' | 'Trending';
+type TabMode = 'Active' | 'Upcoming' | 'Completed' | 'Trending';
 
 const STATUS_TABS: { label: string; mode: TabMode; icon?: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { label: 'Active', mode: 'Active' },
   { label: 'Upcoming', mode: 'Upcoming' },
-  { label: 'Completed', mode: 'Successful' },
+  { label: 'Completed', mode: 'Completed' },
   { label: '🔥 Trending', mode: 'Trending' },
 ];
 
