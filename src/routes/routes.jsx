@@ -14,6 +14,7 @@ import SignUp from "../auth/SignUp/SignUp";
 import PrivetRoutes from "./PrivetRoutes";
 import Payment from "../pages/Payment/Payment";
 import SupplierOrders from "../pages/SupplierOrders/SupplierOrders";
+import SupplierDashboard from "../pages/SupplierDashboard/SupplierDashboard";
 import AdminLogin from "../pages/Admin/AdminLogin";
 import AdminDashboard from "../pages/Admin/AdminDashboard";
 
@@ -63,6 +64,10 @@ export const router = createBrowserRouter([
       {
         path: "/supplier-orders",
         element: <PrivetRoutes><SupplierOrders /></PrivetRoutes>,
+      },
+      {
+        path: "/supplier-dashboard",
+        element: <PrivetRoutes><SupplierDashboard /></PrivetRoutes>,
       },
     ],
   },

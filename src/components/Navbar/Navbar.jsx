@@ -2,7 +2,7 @@ import React, { useState, useContext } from "react";
 import { Link, NavLink } from "react-router";
 import {
   FaHome, FaSignInAlt, FaUserPlus, FaSignOutAlt, FaBars, FaTimes,
-  FaStore, FaShoppingBag, FaPlus, FaTags, FaShoppingCart, FaClipboardList,
+  FaStore, FaShoppingBag, FaPlus, FaTags, FaShoppingCart, FaClipboardList, FaChartBar,
 } from "react-icons/fa";
 import { MdOutlineSmartToy } from "react-icons/md";
 import { AuthContext } from "../../context/AuthContext";
@@ -17,6 +17,7 @@ const Navbar = () => {
     { to: "/", label: "Home", icon: <FaHome /> },
     { to: "/deals", label: "All Deals", icon: <FaTags /> },
     ...(user && isSupplier ? [
+      { to: "/supplier-dashboard", label: "Dashboard", icon: <FaChartBar /> },
       { to: "/my-products", label: "My Products", icon: <FaStore /> },
       { to: "/my-deals", label: "My Deals", icon: <FaShoppingBag /> },
       { to: "/supplier-orders", label: "All Orders", icon: <FaClipboardList /> },
